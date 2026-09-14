@@ -1,14 +1,22 @@
-# server/email_service.py
-# pip install yagmail
-# 사전 준비: 구글 계정 2단계인증 활성화 -> "앱 비밀번호" 발급 -> config.py에 입력
-
+import os
+import sys
 import threading
 import time
 
 import yagmail
 
-from config import EMAIL_SENDER_ADDRESS, EMAIL_APP_PASSWORD, EMAIL_CODE_EXPIRE_SECONDS
-from security import generate_verification_code
+# 프로젝트 루트(YOUNG_CLOUD) 경로를 sys.path에 추가하여 server 폴더 접근 가능하게 설정
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.abspath(os.path.join(current_dir, "../../"))
+if project_root not in sys.path:
+    sys.path.append(project_root)
+
+from server.config import (
+    EMAIL_SENDER_ADDRESS,
+    EMAIL_APP_PASSWORD,
+    EMAIL_CODE_EXPIRE_SECONDS,
+)
+from server.security import generate_verification_code
 
 _pending_codes: dict[str, tuple[str, float]] = {}  # {이메일: (코드, 발급시각)}
 _lock = threading.Lock()

@@ -1,0 +1,4 @@
+pymysql
+DBUtils
+bcrypt
+yagmail
