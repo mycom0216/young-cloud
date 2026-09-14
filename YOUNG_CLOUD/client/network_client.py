@@ -1,55 +1,51 @@
-import sys
-import os
 import socket
 import json
-import hashlib
-from pathlib import Path
-from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QApplication, QWidget, QDialog
-from PySide6.QtGui import QPixmap
-from PySide6.QtUiTools import QUiLoader
 
+class NetworkClient:
+    """서버와 TCP 연결을 맺고 메시지를 송수신하는 공용 통신 클래스"""
+    def __init__(self, host='127.0.0.1', port=8888):
+        self.host = host
+        self.port = port
+        self.sock = None  # 소켓 객체 초기화
 
-# 서버 연결 정보 설정
-SERVER_HOST = '127.0.0.1'
-SERVER_PORT = 9000
+    def connect(self):
+        """서버에 TCP 연결을 시도하는 함수"""
+        try:
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.sock.connect((self.host, self.port))
+            return True
+        except Exception as e:
+            print(f"[네트워크 에러] 서버 연결 실패: {e}")
+            return False
 
+    def send_request(self, action, data=None):
+        """서버로 작업 요청(Action)과 데이터를 전송하고 응답을 받아오는 함수"""
+        # 소켓 연결이 안 되어 있다면 연결 먼저 시도
+        if not self.sock:
+            if not self.connect():
+                return {"status": "fail", "message": "서버와 연결할 수 없습니다."}
 
-def send_login_request(email, raw_password):
-    """
-    서버로 로그인 요청을 전송하고 응답 결과를 반환하는 함수
-    - 비밀번호는 보안을 위해 클라이언트에서 단방향 해시(SHA-256) 처리하여 전송
-    """
-    try:
-        # 비밀번호 단방향 해시 암호화 (데이터 정의서 PASSWORD HASH 규격 대응)
-        password_hash = hashlib.sha256(raw_password.encode('utf-8')).hexdigest()
-        
-        # 전송할 요청 데이터 규격 정의
-        request_data = {
-            "action": "POST_LOGIN",
-            "email": email,
-            "password": password_hash
+        # 서버가 알아볼 수 있도록 딕셔너리 형태로 데이터 포맷 구성
+        payload = {
+            "action": action,
+            "data": data or {}
         }
-        
-        # TCP 소켓 생성 및 서버 연결
-        client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        client_socket.connect((SERVER_HOST, SERVER_PORT))
-        
-        # 데이터 전송
-        client_socket.sendall(json.dumps(request_data).encode('utf-8'))
-        
-        # 서버로부터 응답 대기 및 수신
-        response_data = client_socket.recv(4096)
-        client_socket.close()
-        
-        if response_data:
-            return json.loads(response_data.decode('utf-8'))
-        else:
-            return {"status": "fail", "message": "서버로부터 응답이 없습니다."}
+
+        try:
+            # 파이썬 딕셔너리를 JSON 문자열로 변환 후 바이트로 인코딩해서 서버로 전송
+            self.sock.sendall(json.dumps(payload).encode('utf-8'))
             
-    except ConnectionRefusedError:
-        return {"status": "fail", "message": "서버와 연결할 수 없습니다. 서버가 실행 중인지 확인해주세요."}
-    except Exception as e:
-        return {"status": "fail", "message": f"통신 오류 발생: {str(e)}"}
-    
-    
+            # 서버로부터 응답 데이터 수신 (최대 4096바이트)
+            response_data = self.sock.recv(4096)
+            
+            # 받은 바이트 데이터를 다시 파이썬 딕셔너리로 변환하여 반환
+            return json.loads(response_data.decode('utf-8'))
+        except Exception as e:
+            print(f"[네트워크 에러] 데이터 송수신 중 오류 발생: {e}")
+            return {"status": "error", "message": str(e)}
+
+    def close(self):
+        """서버와의 연결을 안전하게 끊는 함수"""
+        if self.sock:
+            self.sock.close()
+            self.sock = None

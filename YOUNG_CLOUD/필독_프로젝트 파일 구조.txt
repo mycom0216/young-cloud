@@ -2,6 +2,7 @@ YOUNG_CLOUD/
 │
 ├── server/                      # [서버 팀 담당]
 │   ├── server.py                # 단일 통합 서버 파일 (네트워크, DB 연동, 요청 라우팅)
+│   ├── client_hendler.py      # 클라이언트 스레드 생성
 │   ├── database.db              # SQLite 데이터베이스 파일 (또는 MariaDB 연동 모듈)
 │   └── cloud_storage/           # 서버 측 파일 저장 디렉토리 (클라우드 파일 보관함)
 │
