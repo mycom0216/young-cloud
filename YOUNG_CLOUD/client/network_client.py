@@ -1,10 +1,19 @@
+import sys
+import os
 import socket
 import json
 import hashlib
+from pathlib import Path
+from PySide6.QtCore import Signal
+from PySide6.QtWidgets import QApplication, QWidget, QDialog
+from PySide6.QtGui import QPixmap
+from PySide6.QtUiTools import QUiLoader
+
 
 # 서버 연결 정보 설정
 SERVER_HOST = '127.0.0.1'
 SERVER_PORT = 9000
+
 
 def send_login_request(email, raw_password):
     """
@@ -42,3 +51,5 @@ def send_login_request(email, raw_password):
         return {"status": "fail", "message": "서버와 연결할 수 없습니다. 서버가 실행 중인지 확인해주세요."}
     except Exception as e:
         return {"status": "fail", "message": f"통신 오류 발생: {str(e)}"}
+    
+    
