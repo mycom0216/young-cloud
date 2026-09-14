@@ -14,8 +14,9 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QPixmap, QFont
 from PySide6.QtCore import Qt
 
-# 상위 폴더에 있는 client.py에서 통신 함수 임포트
-from sign_client import send_login_request
+# 통신 파일에서 필요한 함수만 '가져다' 쓰기
+from network_client import send_login_request
+# from sign_client import send_login_request
 
 class LoginWindow(QWidget):
     def __init__(self):

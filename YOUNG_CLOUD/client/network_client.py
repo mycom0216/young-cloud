@@ -10,19 +10,9 @@ from PySide6.QtGui import QPixmap
 from PySide6.QtUiTools import QUiLoader
 
 
-
-
 # 서버 연결 정보 설정
 SERVER_HOST = '127.0.0.1'
 SERVER_PORT = 9000
-
-
-
-
-
-
-
-
 
 
 def send_login_request(email, raw_password):
