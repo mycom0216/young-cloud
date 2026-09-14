@@ -1,0 +1,20 @@
+#중간사이즈 팝업 창 파일명 popup_dialog
+from popup_dialog import ReceiveMessagePopup
+# 팝업창 호출 슬롯 메서드
+    def open_receive_message_popup(self):
+        dialog = ReceiveMessagePopup(self)
+        dialog.exec()
+
+
+
+# 작은 사이즈 팝업창 파일명 min_dialog
+from min_dialog import ReceiveMessagePopup
+# 버튼 클릭 이벤트나 특정 조건에서 팝업창 띄우기
+def open_popup(self):
+    popup = ReceiveMessagePopup(self)
+    popup.exec()
+
+
+
+메인 컨텐츠 영역 위젯
+사이즈 750X710로 작업
