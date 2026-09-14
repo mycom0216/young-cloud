@@ -7,9 +7,13 @@
 
 import os
 import socket
+import sys
+
+
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from config import HOST, PORT, LISTEN_BACKLOG, STORAGE_ROOT
-from client_handler import ClientHandler
+from handlers.client_handler import ClientHandler
 
 
 def main():
