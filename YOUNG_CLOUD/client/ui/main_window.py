@@ -22,10 +22,12 @@ from PySide6.QtWidgets import (
 
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, user_info = None):
         super().__init__()
         self.setWindowTitle("Young Cloud Desktop App")
         self.resize(1100, 750)
+        self.user_info = user_info or {}
+        self.user_name = self.user_info.get("name")
 
         # 현재 스크립트가 위치한 디렉토리 경로
         self.base_path = os.path.dirname(os.path.abspath(__file__))
@@ -80,7 +82,7 @@ class MainWindow(QMainWindow):
         layout.setSpacing(20)
         
         # 사용자 프로필 영역
-        profile_label = QLabel("000님,")
+        profile_label = QLabel(f"       {self.user_name}님")
         profile_label.setStyleSheet("color: black; font-weight: bold; font-size: 13px; background: transparent;")
         layout.addWidget(profile_label)
 
