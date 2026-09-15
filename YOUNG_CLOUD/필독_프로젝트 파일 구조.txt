@@ -8,9 +8,9 @@ YOUNG_CLOUD/
 │
 ├── client/                      # [클라이언트 팀 공동/파트별 담당]
 │   ├── main.py                  # 프로그램 진입점
-│   ├── main_window.py       # [핵심] 로그인 성공 > 사이드바 + 서브메뉴 + QStackedWidget 제어 로직
 │   ├── network_client.py        # 서버와 통신(TCP Socket 송수신)을 담당하는 공용 클래스
 │   ├── ui/                            # 기능별 클라이언트 파일 및 UI 디자인 파일
+│   │   ├── dialog/                # 팝업창 및 다이얼로그 ui 파일
 │   │   ├── source/                # 로고 이미지 등 
 │   │   ├── login_window.py      # 로그인 및 회원가입 화면
 │   │   ├── main_window.py       # 일반 사용자 메인 대시보드 (HOME, 캘린더)
@@ -20,6 +20,7 @@ YOUNG_CLOUD/
 │   │   └── settings_window.py   # 설정(개인정보, 메시지, 파일/블랙리스트)
 │   └── utils/                   # 유틸리티 (이메일 인증, 암호화 등)
 │       └── email_auth.py        # yagmail 기반 이메일 인증 모듈
+
 │
 ├── .gitignore                   # Git 제외 대상 설정 (.db 파일, 캐시 등)
 ├── requirements.txt             # 라이브러리 목록 (PySide6, yagmail 등)
