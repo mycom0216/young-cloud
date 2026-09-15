@@ -17,6 +17,7 @@ from PySide6.QtGui import QPixmap, QFont
 from PySide6.QtCore import Qt
 from network_client import NetworkClient, send_login_request
 from dialog.sign_up_ui import Ui_Form  # 회원가입 UI 클래스 임포트
+from main_window import MainWindow
 
 class SignUpDialog(QDialog, Ui_Form):
     """회원가입 창 클래스 (sign_up_ui.py 연동)"""
@@ -281,14 +282,17 @@ class LoginWindow(QWidget):
         
         if response.get("status") == "success":
             QMessageBox.information(self, "성공", "로그인 성공!")
-            self.open_main_window()
+            self.open_main_window(response)
         else:
             error_msg = response.get("message", "로그인에 실패했습니다.")
             QMessageBox.critical(self, "로그인 실패", error_msg)
 
-    def open_main_window(self):
+    def open_main_window(self, user_info):
         print("[GUI] 메인 화면으로 전환을 수행합니다.")
+        self.main_window = MainWindow(user_info)
+        self.main_window.show()
         self.close()
+        
 
     def open_signup_page(self):
         """회원가입 다이얼로그 오픈"""
