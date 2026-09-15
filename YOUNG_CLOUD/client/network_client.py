@@ -20,32 +20,47 @@ class NetworkClient:
 
     def send_request(self, action, data=None):
         """서버로 작업 요청(Action)과 데이터를 전송하고 응답을 받아오는 함수"""
-        # 소켓 연결이 안 되어 있다면 연결 먼저 시도
         if not self.sock:
             if not self.connect():
                 return {"status": "fail", "message": "서버와 연결할 수 없습니다."}
 
-        # 서버가 알아볼 수 있도록 딕셔너리 형태로 데이터 포맷 구성
         payload = {
             "action": action,
             "data": data or {}
         }
 
         try:
-            # 파이썬 딕셔너리를 JSON 문자열로 변환 후 바이트로 인코딩해서 서버로 전송
             self.sock.sendall(json.dumps(payload).encode('utf-8'))
-            
-            # 서버로부터 응답 데이터 수신 (최대 4096바이트)
             response_data = self.sock.recv(4096)
-            
-            # 받은 바이트 데이터를 다시 파이썬 딕셔너리로 변환하여 반환
             return json.loads(response_data.decode('utf-8'))
         except Exception as e:
             print(f"[네트워크 에러] 데이터 송수신 중 오류 발생: {e}")
             return {"status": "error", "message": str(e)}
+
+    def send_email_verification(self, email):
+        """서버로 이메일 인증코드 발송 요청"""
+        return self.send_request("send_email", {"email": email})
+
+    def send_signup(self, user_info):
+        """서버로 회원가입 정보 등록 요청"""
+        return self.send_request("signup", user_info)
 
     def close(self):
         """서버와의 연결을 안전하게 끊는 함수"""
         if self.sock:
             self.sock.close()
             self.sock = None
+
+
+# ==========================================
+# 💡 [호환성 유지 함수] login_window.py 대응
+# ==========================================
+def send_login_request(email, password):
+    """login_window.py에서 임포트하는 함수 에러 방지용 래퍼 함수"""
+    client = NetworkClient(host='127.0.0.1', port=8888)
+    response = client.send_request("login", {
+        "user_id": email,
+        "password": password
+    })
+    client.close()
+    return response
