@@ -9,8 +9,9 @@ root_dir = os.path.dirname(parent_dir)  # 프로젝트 루트 폴더
 sys.path.append(parent_dir)
 sys.path.append(os.path.join(parent_dir, "utils"))
 
-from dialog.sign_up_ui import Ui_Form
 from dialog.company_dialog import CompanySearchDialog  # 분리된 회사 검색 다이얼로그 임포트
+from dialog.sign_up_ui import Ui_Form  # 회원가입 UI 클래스 임포트
+from main_window import MainWindow
 from network_client import NetworkClient, send_login_request
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont, QPixmap
@@ -26,10 +27,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from main_window import MainWindow
 
-from dialog.sign_up_ui import Ui_Form  # 회원가입 UI 클래스 임포트
-from main_window import MainWindow
 
 class SignUpDialog(QDialog, Ui_Form):
     """회원가입 창 클래스 (sign_up_ui.py 연동)"""
@@ -45,12 +43,12 @@ class SignUpDialog(QDialog, Ui_Form):
         self.is_pw_checked = False  # 비밀번호 유효성 검사 통과 여부
 
         # 버튼 이벤트 연결
-        self.pushButton.clicked.connect(self.request_auth_code)       # 인증코드발송 버튼
-        self.pushButton_2.clicked.connect(self.verify_auth_code)      # 인증확인 버튼
+        self.pushButton.clicked.connect(self.request_auth_code)  # 인증코드발송 버튼
+        self.pushButton_2.clicked.connect(self.verify_auth_code)  # 인증확인 버튼
         self.pushButton_3.clicked.connect(self.check_password_valid)  # 비밀번호 확인 버튼
-        self.pushButton_4.clicked.connect(self.handle_signup)         # 가입하기 버튼
-        self.pushButton_5.clicked.connect(self.close)                 # 닫기 버튼
-        self.pushButton_7.clicked.connect(self.handle_company_api)    # 회사명 검색 버튼
+        self.pushButton_4.clicked.connect(self.handle_signup)  # 가입하기 버튼
+        self.pushButton_5.clicked.connect(self.close)  # 닫기 버튼
+        self.pushButton_7.clicked.connect(self.handle_company_api)  # 회사명 검색 버튼
 
     def handle_company_api(self):
         """회사 검색 다이얼로그를 띄우고 선택된 회사명을 lineEdit_5에 대입"""
@@ -128,6 +126,7 @@ class SignUpDialog(QDialog, Ui_Form):
             QMessageBox.warning(self, "경고", "이름과 회사명을 모두 입력해주세요.")
             return
 
+        # 등급(SERVICE ID) 라디오 버튼 확인 (데이터 정의서 서비스 등급 매핑)
         grade = "일반"
         if self.radioButton_2.isChecked():
             grade = "비즈니스"
@@ -322,7 +321,6 @@ class LoginWindow(QWidget):
         self.main_window = MainWindow(user_info)
         self.main_window.show()
         self.close()
-        
 
     def open_signup_page(self):
         """회원가입 다이얼로그 오픈"""
