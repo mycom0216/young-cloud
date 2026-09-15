@@ -1,25 +1,26 @@
 # server/security.py
-# pip install bcrypt
 
 import re
 import secrets
 import string
-
-import bcrypt
+import hashlib  # hashlib 추가 (bcrypt 대신 사용)
 
 from config import PASSWORD_MIN_LEN, PASSWORD_MAX_LEN, EMAIL_CODE_LENGTH
 
 
 def hash_password(plain_password: str) -> str:
-    hashed_bytes = bcrypt.hashpw(plain_password.encode("utf-8"), bcrypt.gensalt())
-    return hashed_bytes.decode("utf-8")
+    """평문 비밀번호를 SHA-256 단방향 해시 문자열(64자리 Hex)로 변환"""
+    return hashlib.sha256(plain_password.encode("utf-8")).hexdigest()
 
 
 def verify_password(plain_password: str, stored_hash: str) -> bool:
-    try:
-        return bcrypt.checkpw(plain_password.encode("utf-8"), stored_hash.encode("utf-8"))
-    except (ValueError, TypeError):
+    """입력받은 평문을 SHA-256 변환하여 DB의 stored_hash 값과 비교"""
+    if not stored_hash:
         return False
+    
+    # constant-time 비교 함수(compare_digest)를 사용하여 타이밍 공격(Timing Attack) 방지
+    hashed_input = hash_password(plain_password)
+    return hashlib.compare_digest(hashed_input.lower(), stored_hash.lower())
 
 
 # 영문 + 숫자 + 특수문자 각 1개 이상, 8~20자
