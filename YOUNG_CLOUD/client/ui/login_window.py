@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from main_window import MainWindow
 
 
 class SignUpDialog(QDialog, Ui_Form):
@@ -316,6 +317,8 @@ class LoginWindow(QWidget):
 
     def open_main_window(self):
         print("[GUI] 메인 화면으로 전환을 수행합니다.")
+        self.main_window = MainWindow(user_info)
+        self.main_window.show()
         self.close()
 
     def open_signup_page(self):
