@@ -24,22 +24,22 @@ class Ui_contentWidget(object):
             contentWidget.setObjectName(u"contentWidget")
         contentWidget.resize(819, 775)
         contentWidget.setStyleSheet(u"QWidget#contentWidget {\n"
-"    background-color: #EFF8F1; /* \uc6d0\ud558\ub294 \ubc30\uacbd\uc0c9 */\n"
+"    background-color: #EFF8F1; /* 원하는 배경색 */\n"
 "}\n"
 "\n"
-"/* 2. \uce98\ub9b0\ub354 \uc704\uc82f(QCalendarWidget)\uc740 \uc2a4\ud0c0\uc77c \uc0c1\uc18d\uc744 \ubc1b\uc9c0 \uc54a\ub3c4\ub85d \ubcc4\ub3c4\ub85c \uae30\ubcf8 \ubc30\uacbd\uc0c9 \uc9c0\uc815 */\n"
+"/* 2. 캘린더 위젯(QCalendarWidget)은 스타일 상속을 받지 않도록 별도로 기본 배경색 지정 */\n"
 "QCalendarWidget {\n"
 "    background-color: #E1CB87;\n"
 "	border-radius: 3px;\n"
 "}\n"
 "\n"
 "QCalendarWidget QWidget#qt_calendar_navigationbar {\n"
-"    background-color: #128BA6; /* \uc6d0\ud558\ub294 \ud30c\ub780\uc0c9 \ucf54\ub4dc\ub85c \ubcc0\uacbd \uac00\ub2a5 */\n"
+"    background-color: #128BA6; /* 원하는 파란색 코드로 변경 가능 */\n"
 "}\n"
 "\n"
 "QCalendarWidget QAbstractItemView:enabled {\n"
-"    selection-background-color: #9CBF1F; /* \uc120\ud0dd\ub41c \ub0a0\uc9dc\uc758 \ubc30\uacbd\uc0c9 (\ud30c\ub780\uc0c9) */\n"
-"    selection-color: #FFFFFF;            /* \uc120\ud0dd\ub41c \ub0a0\uc9dc\uc758 \uae00\uc790\uc0c9 (\ud770\uc0c9) */\n"
+"    selection-background-color: #9CBF1F; /* 선택된 날짜의 배경색 (파란색) */\n"
+"    selection-color: #FFFFFF;            /* 선택된 날짜의 글자색 (흰색) */\n"
 "}\n"
 "\n"
 "QCalendarWidget QWidget#qt_calendar_navigationbar QToolButton:hover {\n"
@@ -51,7 +51,7 @@ class Ui_contentWidget(object):
         self.label.setObjectName(u"label")
         self.label.setGeometry(QRect(20, 50, 141, 21))
         font = QFont()
-        font.setFamilies([u"\ub098\ub214\uc2a4\ud018\uc5b4"])
+        font.setFamilies([u"나눔스퀘어"])
         font.setPointSize(13)
         self.label.setFont(font)
         self.progressBar = QProgressBar(contentWidget)
@@ -71,7 +71,7 @@ class Ui_contentWidget(object):
         self.label_bar_name.setObjectName(u"label_bar_name")
         self.label_bar_name.setGeometry(QRect(20, 100, 141, 21))
         font1 = QFont()
-        font1.setFamilies([u"\ub098\ub214\uc2a4\ud018\uc5b4"])
+        font1.setFamilies([u"나눔스퀘어"])
         font1.setPointSize(10)
         self.label_bar_name.setFont(font1)
         self.label_2 = QLabel(contentWidget)
@@ -92,7 +92,7 @@ class Ui_contentWidget(object):
         self.calendarWidget.setObjectName(u"calendarWidget")
         self.calendarWidget.setGeometry(QRect(490, 230, 281, 381))
         font2 = QFont()
-        font2.setFamilies([u"\ub098\ub214\uc2a4\ud018\uc5b4"])
+        font2.setFamilies([u"나눔스퀘어"])
         font2.setBold(True)
         self.calendarWidget.setFont(font2)
         self.calendarWidget.setStyleSheet(u"")
@@ -114,12 +114,11 @@ class Ui_contentWidget(object):
 
     def retranslateUi(self, contentWidget):
         contentWidget.setWindowTitle(QCoreApplication.translate("contentWidget", u"Form", None))
-        self.label.setText(QCoreApplication.translate("contentWidget", u"000\ub2d8, \ud658\uc601\ud569\ub2c8\ub2e4.", None))
-        self.label_bar_name.setText(QCoreApplication.translate("contentWidget", u"\ub4f1\uae09 \ubc0f \uc6a9\ub7c9", None))
-        self.label_2.setText(QCoreApplication.translate("contentWidget", u"\uce98\ub9b0\ub354", None))
+        self.label.setText(QCoreApplication.translate("contentWidget", u"000님, 환영합니다.", None))
+        self.label_bar_name.setText(QCoreApplication.translate("contentWidget", u"등급 및 용량", None))
+        self.label_2.setText(QCoreApplication.translate("contentWidget", u"캘린더", None))
         self.label_3.setText("")
         self.label_4.setText("")
         self.label_5.setText("")
         self.label_6.setText("")
     # retranslateUi
-

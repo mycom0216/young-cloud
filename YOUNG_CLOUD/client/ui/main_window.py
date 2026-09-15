@@ -19,6 +19,20 @@ from PySide6.QtWidgets import (
     QFrame
 )
 
+from dialog.home_widget import HomeWidget
+
+
+# 💡 아직 개발되지 않은 메뉴들을 위한 임시 안내 화면 클래스
+class PlaceholderView(QWidget):
+    def __init__(self, menu_name):
+        super().__init__()
+        layout = QVBoxLayout(self)
+        label = QLabel(f"'{menu_name}' 화면은 팀원이 개발 중입니다. 🚧")
+        label.setStyleSheet("font-size: 15px; color: #555; font-weight: bold;")
+        label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(label)
+
+
 
 
 class MainWindow(QMainWindow):
@@ -27,7 +41,13 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Young Cloud Desktop App")
         self.resize(1100, 750)
         self.user_info = user_info or {}
-        self.user_name = self.user_info.get("name")
+        self.user_name = self.user_info.get("name", "사용자")
+        
+        # 관리자 여부 확인 (서버 응답 키값에 따라 소문자/대문자 모두 대응)
+        self.is_admin = bool(
+            self.user_info.get("is_admin", False) or 
+            self.user_info.get("IS_ADMIN", False)
+        )
 
         # 현재 스크립트가 위치한 디렉토리 경로
         self.base_path = os.path.dirname(os.path.abspath(__file__))
@@ -39,24 +59,26 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # 3. 메인 컨텐츠 영역 생성
-        self.init_content_area(main_layout)
-
-        # 2. 좌측 서브메뉴 영역 생성
-        self.init_submenu(main_layout)
-
-        # 1. 좌측 사이드바 영역 생성
+        # 1. 좌측 사이드바 영역 생성 및 추가
         self.init_sidebar(main_layout)
-        
-        # 레이아웃 순서 조정 (사이드바 -> 서브메뉴 -> 메인컨텐츠 순)
-        main_layout.removeWidget(self.sidebar)
-        main_layout.removeWidget(self.submenu_container)
-        main_layout.removeWidget(self.content_area)
-        
         main_layout.addWidget(self.sidebar)
-        main_layout.addWidget(self.submenu_container)
-        main_layout.addWidget(self.content_area, stretch=1)
 
+        # 2. 좌측 서브메뉴 영역 생성 및 추가
+        self.init_submenu(main_layout)
+        main_layout.addWidget(self.submenu_container)
+
+        # 💡 3. 서브메뉴와 메인컨텐츠 사이의 세로 구분선 생성 및 추가
+        self.vertical_line = QFrame()
+        self.vertical_line.setFrameShape(QFrame.VLine)
+        self.vertical_line.setFrameShadow(QFrame.Sunken)
+        self.vertical_line.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
+        self.vertical_line.setStyleSheet("background-color: #C5D2C7; border: none;")
+        self.vertical_line.setFixedWidth(2)  # 선 두께 (2픽셀)
+        main_layout.addWidget(self.vertical_line)
+
+        # 4. 메인 컨텐츠 영역 생성 및 추가 (stretch=1을 주어 남은 공간을 꽉 채우게 함)
+        self.init_content_area(main_layout)
+        main_layout.addWidget(self.content_area, stretch=1)
     def init_sidebar(self, parent_layout):
         self.sidebar = QWidget()
         self.sidebar.setStyleSheet("""
@@ -102,14 +124,21 @@ class MainWindow(QMainWindow):
 
         layout.addSpacing(50)
 
-        # 사이드바 메뉴 정의 (텍스트, 아이콘 파일명, 콜백)
-        menus = [
-            ("HOME", "home.png", lambda: self.change_submenu(0)),
-            ("캘린더", "calendar.png", lambda: self.change_submenu(1)),
-            ("클라우드", "cloud.png", lambda: self.change_submenu(2)),
-            ("메시지", "message.png", lambda: self.change_submenu(3)),
-            ("설정", "settings.png", lambda: self.change_submenu(4)),
-        ]
+        # 💡 [권한별 사이드바 메뉴 분기]
+        if self.is_admin:
+            menus = [
+                ("HOME", "home.png", lambda: self.change_submenu(0)),
+                ("메시지", "message.png", lambda: self.change_submenu(1)),
+                ("차단설정", "settings.png", lambda: self.change_submenu(2)),
+            ]
+        else:
+            menus = [
+                ("HOME", "home.png", lambda: self.change_submenu(0)),
+                ("캘린더", "calendar.png", lambda: self.change_submenu(1)),
+                ("클라우드", "cloud.png", lambda: self.change_submenu(2)),
+                ("메시지", "message.png", lambda: self.change_submenu(3)),
+                ("설정", "settings.png", lambda: self.change_submenu(4)),
+            ]
 
         self.menu_buttons = []
         for name, icon_filename, callback in menus:
@@ -144,9 +173,24 @@ class MainWindow(QMainWindow):
             }
         """)
         logout_btn.setMinimumHeight(35)
+        # 로그아웃 버튼 클릭 시그널 연결
+        logout_btn.clicked.connect(self.logout)
         layout.addWidget(logout_btn)
 
         parent_layout.addWidget(self.sidebar)
+
+    def logout(self):
+        """로그아웃 처리: 현재 메인 창을 닫고 로그인 창을 다시 엶"""
+        print("[GUI] 로그아웃을 수행합니다.")
+        # 순환 참조 방지를 위해 함수 내부에서 로그인 윈도우 임포트
+        # (프로젝트 폴더 구조에 맞게 경로를 조정해주세요. 예: from ui.login_window import LoginWindow)
+        from login_window import LoginWindow 
+        self.login_window = LoginWindow()
+        self.login_window.show()
+        
+        # 현재 메인 윈도우 닫기
+        self.close()
+
 
     def init_submenu(self, parent_layout):
         self.submenu_container = QWidget()
@@ -197,9 +241,13 @@ class MainWindow(QMainWindow):
         self.submenu_stack = QStackedWidget()
         self.submenu_stack.setStyleSheet("background: transparent;")
 
-        menu_titles = ["HOME", "캘린더", "클라우드", "메시지", "설정"]
+        # 💡 [권한별 서브메뉴 타이틀 및 하위 항목 분기]
+        if self.is_admin:
+            menu_titles = ["HOME", "메시지", "차단설정"]
+        else:
+            menu_titles = ["HOME", "캘린더", "클라우드", "메시지", "설정"]
 
-        for i in range(5):
+        for i in range(len(menu_titles)):
             page = QWidget()
             p_layout = QVBoxLayout(page)
             p_layout.setContentsMargins(0, 0, 0, 0)
@@ -229,21 +277,28 @@ class MainWindow(QMainWindow):
                 }
             """)
 
-            if i == 0: # HOME
-                items = ["홈 메인"]
-            elif i == 1: # 캘린더
-                items = ["달력보기"]
-            elif i == 2: # 클라우드
-                items = ["내 파일", "공유 문서", "휴지통"]
-            elif i == 3: # 메시지
-                items = ["메시지함", "메시지 보내기", "받은메시지", "보낸메시지"]
-            else: # 설정
-                items = ["서비스 확인 및 변경", "개인정보변경", "기본메시지 설정", "마무리메시지 설정", "블랙리스트 설정", "클라우드 설정"]
+            if self.is_admin:
+                if i == 0: # HOME
+                    items = ["홈 메인"]
+                elif i == 1: # 메시지
+                    items = ["보낸메시지","메시지 보내기"]
+                else: # 차단설정
+                    items = ["서비스제한"]
+            else:
+                if i == 0: # HOME
+                    items = ["홈 메인"]
+                elif i == 1: # 캘린더
+                    items = ["달력보기"]
+                elif i == 2: # 클라우드
+                    items = ["내 파일", "공유 문서", "휴지통"]
+                elif i == 3: # 메시지
+                    items = ["메시지함", "메시지 보내기", "받은메시지", "보낸메시지"]
+                else: # 설정
+                    items = ["서비스 확인 및 변경", "개인정보변경", "기본메시지 설정", "마무리메시지 설정", "블랙리스트 설정", "클라우드 설정"]
 
             for item in items:
                 sub_list.addItem(item)
 
-            # 서브메뉴 항목 클릭 시 우측 메인 컨텐츠 전환 함수 연결
             sub_list.itemClicked.connect(self.on_submenu_clicked)
 
             p_layout.addWidget(sub_list)
@@ -271,22 +326,22 @@ class MainWindow(QMainWindow):
         self.content_stack.setStyleSheet("background: transparent;")
 
         # 기본 빈 페이지 추가 (필요에 따라 동적으로 채워넣거나 확장 가능)
-        self.default_page = QWidget()
-        self.content_stack.addWidget(self.default_page)
+        # self.default_page = QWidget()
+        # self.content_stack.addWidget(self.default_page)
 
-        layout.addWidget(self.content_stack)
-        parent_layout.addWidget(self.content_area, stretch=1)
+        # layout.addWidget(self.content_stack)
+        # parent_layout.addWidget(self.content_area, stretch=1)
         
         
         
-        # ####여기에 팀원들이 만든 위젯들을 인스턴스화하여 스택에 추가###############
-        # # =========================================================================
-        # # 💡 [팀원 연동 매핑 딕셔너리] 
-        # # 서브메뉴 항목 이름과 팀원이 만든 위젯 클래스를 1:1로 매핑하는 공간입니다.
-        # # 개발 완료된 화면 위젯으로 교체해 주세요.
-        # # =========================================================================
+        ####여기에 팀원들이 만든 위젯들을 인스턴스화하여 스택에 추가###############
+        # =========================================================================
+        # 💡 [팀원 연동 매핑 딕셔너리] 
+        # 서브메뉴 항목 이름과 팀원이 만든 위젯 클래스를 1:1로 매핑하는 공간입니다.
+        # 개발 완료된 화면 위젯으로 교체해 주세요.
+        # =========================================================================
         # self.content_pages = {
-        #     "홈 메인": SampleView("홈 메인"),
+        #     "홈 메인": HomeWidget(self.user_info),
         #     "달력보기": SampleView("달력보기"),
         #     "내 파일": SampleView("내 파일"),
         #     "공유 문서": SampleView("공유 문서"),
@@ -303,14 +358,43 @@ class MainWindow(QMainWindow):
         #     "클라우드 설정": SampleView("클라우드 설정"),
         # }
 
-        # # 스택에 페이지들을 등록하고 인덱스 맵 구성
-        # self.page_index_map = {}
-        # for idx, (name, widget) in enumerate(self.content_pages.items()):
-        #     self.content_stack.addWidget(widget)
-        #     self.page_index_map[name] = idx
 
-        # layout.addWidget(self.content_stack)
-        # parent_layout.addWidget(self.content_area, stretch=1)
+#### 여기서부터 메인위젯 테스트용
+# 💡 모든 서브메뉴 항목 리스트 정의 (일반 사용자 + 관리자 메뉴 통합)
+        all_menu_names = [
+            "홈 메인", "달력보기", "내 파일", "공유 문서", "휴지통", 
+            "메시지함", "메시지 보내기", "받은메시지", "보낸메시지", 
+            "서비스 확인 및 변경", "개인정보변경", "기본메시지 설정", 
+            "마무리메시지 설정", "블랙리스트 설정", "클라우드 설정", "서비스제한"
+        ]
+
+        # 💡 스택 페이지 딕셔너리 동적 생성 ("홈 메인"만 진짜 홈위젯, 나머지는 임시 화면)
+        self.content_pages = {}
+        for name in all_menu_names:
+            if name == "홈 메인":
+                self.content_pages[name] = HomeWidget(self.user_info)
+            else:
+                self.content_pages[name] = PlaceholderView(name)
+
+
+    ### 여기까지 테스트용 코드
+
+
+
+
+
+
+
+
+
+        # 스택에 페이지들을 등록하고 인덱스 맵 구성
+        self.page_index_map = {}
+        for idx, (name, widget) in enumerate(self.content_pages.items()):
+            self.content_stack.addWidget(widget)
+            self.page_index_map[name] = idx
+
+        layout.addWidget(self.content_stack)
+        parent_layout.addWidget(self.content_area, stretch=1)
         
         
 
@@ -333,6 +417,10 @@ class MainWindow(QMainWindow):
     def update_content_view(self, menu_text):
         """우측 메인 컨텐츠 상단 경로명 업데이트"""
         self.path_label.setText(f"> {menu_text}")
+        # 💡 선택된 메뉴 이름에 해당하는 페이지로 스택 인덱스 변경
+        if menu_text in self.page_index_map:
+            self.content_stack.setCurrentIndex(self.page_index_map[menu_text])
+        
         
     # def open_file_upload_dialog(self):
     #     dialog = FileUploadPopup(self)
