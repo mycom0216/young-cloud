@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>819</width>
-    <height>775</height>
+    <width>750</width>
+    <height>710</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -20,7 +20,7 @@
 
 /* 2. 캘린더 위젯(QCalendarWidget)은 스타일 상속을 받지 않도록 별도로 기본 배경색 지정 */
 QCalendarWidget {
-    background-color: #E1CB87;
+    background-color: #FFFFFF; 
 	border-radius: 3px;
 }
 
@@ -33,15 +33,12 @@ QCalendarWidget QAbstractItemView:enabled {
     selection-color: #FFFFFF;            /* 선택된 날짜의 글자색 (흰색) */
 }
 
-QCalendarWidget QWidget#qt_calendar_navigationbar QToolButton:hover {
-    background-color: rgba(255, 255, 255, 20%);
-    border-radius: 4px;
-}</string>
+</string>
   </property>
   <widget class="QLabel" name="label">
    <property name="geometry">
     <rect>
-     <x>20</x>
+     <x>10</x>
      <y>50</y>
      <width>141</width>
      <height>21</height>
@@ -50,7 +47,7 @@ QCalendarWidget QWidget#qt_calendar_navigationbar QToolButton:hover {
    <property name="font">
     <font>
      <family>나눔스퀘어</family>
-     <pointsize>13</pointsize>
+     <pointsize>11</pointsize>
     </font>
    </property>
    <property name="text">
@@ -60,9 +57,9 @@ QCalendarWidget QWidget#qt_calendar_navigationbar QToolButton:hover {
   <widget class="QProgressBar" name="progressBar">
    <property name="geometry">
     <rect>
-     <x>20</x>
+     <x>10</x>
      <y>120</y>
-     <width>201</width>
+     <width>391</width>
      <height>16</height>
     </rect>
    </property>
@@ -84,8 +81,8 @@ QCalendarWidget QWidget#qt_calendar_navigationbar QToolButton:hover {
   <widget class="QLabel" name="label_bar_name">
    <property name="geometry">
     <rect>
-     <x>20</x>
-     <y>100</y>
+     <x>10</x>
+     <y>90</y>
      <width>141</width>
      <height>21</height>
     </rect>
@@ -103,8 +100,8 @@ QCalendarWidget QWidget#qt_calendar_navigationbar QToolButton:hover {
   <widget class="QLabel" name="label_2">
    <property name="geometry">
     <rect>
-     <x>490</x>
-     <y>190</y>
+     <x>440</x>
+     <y>180</y>
      <width>141</width>
      <height>21</height>
     </rect>
@@ -112,7 +109,7 @@ QCalendarWidget QWidget#qt_calendar_navigationbar QToolButton:hover {
    <property name="font">
     <font>
      <family>나눔스퀘어</family>
-     <pointsize>13</pointsize>
+     <pointsize>11</pointsize>
     </font>
    </property>
    <property name="text">
@@ -122,10 +119,10 @@ QCalendarWidget QWidget#qt_calendar_navigationbar QToolButton:hover {
   <widget class="QLabel" name="label_3">
    <property name="geometry">
     <rect>
-     <x>20</x>
-     <y>190</y>
-     <width>231</width>
-     <height>111</height>
+     <x>10</x>
+     <y>210</y>
+     <width>210</width>
+     <height>100</height>
     </rect>
    </property>
    <property name="text">
@@ -141,10 +138,10 @@ QCalendarWidget QWidget#qt_calendar_navigationbar QToolButton:hover {
   <widget class="QLabel" name="label_4">
    <property name="geometry">
     <rect>
-     <x>20</x>
+     <x>10</x>
      <y>320</y>
-     <width>221</width>
-     <height>291</height>
+     <width>210</width>
+     <height>271</height>
     </rect>
    </property>
    <property name="text">
@@ -160,8 +157,8 @@ QCalendarWidget QWidget#qt_calendar_navigationbar QToolButton:hover {
   <widget class="QCalendarWidget" name="calendarWidget">
    <property name="geometry">
     <rect>
-     <x>490</x>
-     <y>230</y>
+     <x>440</x>
+     <y>210</y>
      <width>281</width>
      <height>381</height>
     </rect>
@@ -179,10 +176,10 @@ QCalendarWidget QWidget#qt_calendar_navigationbar QToolButton:hover {
   <widget class="QLabel" name="label_5">
    <property name="geometry">
     <rect>
-     <x>260</x>
-     <y>190</y>
-     <width>201</width>
-     <height>111</height>
+     <x>232</x>
+     <y>210</y>
+     <width>185</width>
+     <height>101</height>
     </rect>
    </property>
    <property name="text">
@@ -198,10 +195,10 @@ QCalendarWidget QWidget#qt_calendar_navigationbar QToolButton:hover {
   <widget class="QLabel" name="label_6">
    <property name="geometry">
     <rect>
-     <x>260</x>
+     <x>232</x>
      <y>320</y>
-     <width>201</width>
-     <height>291</height>
+     <width>185</width>
+     <height>271</height>
     </rect>
    </property>
    <property name="text">
