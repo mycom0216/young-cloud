@@ -4,6 +4,7 @@ import json
 import pymysql
 import random
 import yagmail
+import hashlib
 
 class ClientHandler(threading.Thread):
     def __init__(self, client_sock, client_addr, db_lock):
@@ -53,8 +54,13 @@ class ClientHandler(threading.Thread):
                 if action == "login":
                     user_id = data.get("user_id")
                     password = data.get("password")
+                    # 입력받은 평문 비밀번호를 SHA-256 해시 문자열로 변환
+                    hashed_pw = hashlib.sha256(password.encode("utf-8")).hexdigest()
                     
-                    cursor.execute("SELECT * FROM USER WHERE EMAIL = %s AND PASSWORD_HASH = %s", (user_id, password))
+                    cursor.execute(
+                        "SELECT * FROM USER WHERE EMAIL = %s AND LOWER(PASSWORD_HASH) = LOWER(%s)",
+                        (user_id, hashed_pw),
+                    )
                     user = cursor.fetchone()
                     
                     if user:
