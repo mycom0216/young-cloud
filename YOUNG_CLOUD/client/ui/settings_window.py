@@ -73,24 +73,16 @@ class ServiceSettingWidget(QWidget):
         header_layout = QVBoxLayout()
         header_layout.setSpacing(12)
 
-        title_label = QLabel("> 서비스 확인 및 변경")
-        title_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #1E293B;")
-
-        # 상단 구분선
-        line_top = QFrame()
-        line_top.setFrameShape(QFrame.HLine)
-        line_top.setStyleSheet("color: #94A3B8; background-color: #94A3B8; height: 1px; border: none;")
 
         self.current_tier_label = QLabel(f"현재 이용중인 등급 : {self.current_tier}")
-        self.current_tier_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #1E293B;")
+        self.current_tier_label.setStyleSheet("font-size: 12px; font-weight: bold; color: #1E293B;")
 
         # 하단 구분선
         line_bottom = QFrame()
         line_bottom.setFrameShape(QFrame.HLine)
         line_bottom.setStyleSheet("color: #94A3B8; background-color: #94A3B8; height: 1px; border: none;")
 
-        header_layout.addWidget(title_label)
-        header_layout.addWidget(line_top)
+       
         header_layout.addWidget(self.current_tier_label)
         header_layout.addWidget(line_bottom)
 
