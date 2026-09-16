@@ -1,5 +1,7 @@
 import os
 import sys
+from ui.cloud_window import CloudWindow
+from network_client import NetworkClient
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import (
@@ -379,6 +381,8 @@ class MainWindow(QMainWindow):
         for name in all_menu_names:
             if name == "홈 메인":
                 self.content_pages[name] = HomeWidget(self.user_info)
+            elif name == "내 파일":
+                self.content_pages[name] = CloudWindow()
             elif name == "달력보기":
                 self.content_pages[name] = CalenderWidget()
             elif name == "서비스 확인 및 변경":  # 👈 이 조건문을 추가합니다
