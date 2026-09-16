@@ -96,6 +96,20 @@ class NetworkClient:
         return self.send_request("settings_tier_update", {
             "email": email, 
             "grade_name": grade_name
+        })
+        
+    def update_user_name(self, email, name):
+        """서버로 사용자 이름 변경을 요청합니다."""
+        return self.send_request("update_user_name", {
+            "email": email,
+            "name": name
+        })
+
+    def update_user_password(self, email, password):
+        """서버로 사용자 비밀번호 변경을 요청합니다."""
+        return self.send_request("update_user_password", {
+            "email": email,
+            "password": password
         })            
             
 
