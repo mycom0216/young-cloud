@@ -1,7 +1,7 @@
 # client/ui/message_window.py
 import sys
 import os
-from PySide6.QtCore import Qt, QStringListModel, QSettings
+from PySide6.QtCore import Qt, QStringListModel, QSettings, QTimer
 from PySide6.QtGui import QFont, QIcon, QCursor
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
@@ -208,7 +208,18 @@ class MessageWidget(QWidget):
         
         self.init_ui()
         self.load_messages()
-
+        # 💡 5초(5000ms)마다 load_messages를 자동 실행하는 타이머 설정
+        self.timer = QTimer(self)
+        self.timer.setInterval(5000)  # 5초 설정
+        self.timer.timeout.connect(self.load_messages)
+        self.timer.start()
+        
+    def closeEvent(self, event):
+        """메시지 창/위젯이 닫힐 때 타이머를 정지하여 리소스 정리"""
+        if hasattr(self, 'timer'):
+            self.timer.stop()
+        super().closeEvent(event)    
+        
     def init_ui(self):
         """화면 레이아웃 초기화"""
         self.setStyleSheet("background-color: #FFFFFF; font-family: '나눔스퀘어', 'Malgun Gothic', sans-serif;")
@@ -320,20 +331,37 @@ class MessageWidget(QWidget):
 
         for row, msg in enumerate(messages):
             msg_id = msg.get("MESSAGE_ID")
-            sender = msg.get("SENDER_EMAIL")
-            content = msg.get("CONTENT")
+            sender = msg.get("SENDER_EMAIL", "")
+            content = msg.get("CONTENT", "")
             is_read = msg.get("IS_READ", False)
-            date_str = msg.get("CREATED_AT")
+            date_str = msg.get("CREATED_AT", "")
 
+            # 0열: 체크박스
             chk_item = QTableWidgetItem()
             chk_item.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
             chk_item.setCheckState(Qt.Unchecked)
             chk_item.setData(Qt.UserRole, msg_id)
             self.table.setItem(row, 0, chk_item)
 
+            # 공통 폰트 설정 (읽지 않았으면 볼드체)
             font = QFont("나눔스퀘어", 9)
             if not is_read:
                 font.setBold(True)
+
+            # 1열: 보낸사람
+            item_sender = QTableWidgetItem(str(sender))
+            item_sender.setFont(font)
+            self.table.setItem(row, 1, item_sender)
+
+            # 2열: 내용 (CONTENT)
+            item_content = QTableWidgetItem(str(content))
+            item_content.setFont(font)
+            self.table.setItem(row, 2, item_content)
+
+            # 3열: 받은 날짜
+            item_date = QTableWidgetItem(str(date_str))
+            item_date.setFont(font)
+            self.table.setItem(row, 3, item_date)
 
             self.table.setItem(row, 1, QTableWidgetItem(sender)).setFont(font) if self.table.setItem(row, 1, QTableWidgetItem(sender)) else None
             # 위 코드 간결화 적용

@@ -68,6 +68,8 @@ class ClientHandler(threading.Thread):
                         response = {
                             "status": "success", 
                             "message": "로그인 성공", 
+                            "email": user.get('EMAIL'),
+                            "service_id":user.get('SERVICE_ID'),
                             "is_admin": bool(user.get('IS_ADMIN', 0)),
                             "is_banned": bool(user.get('IS_BANNED', 0)),
                             "name": user.get('NAME', '사용자')
@@ -176,7 +178,7 @@ class ClientHandler(threading.Thread):
                     sender_email = data.get("sender")
                     receiver_email = data.get("receiver")
                     content = data.get("content")
-                    
+                    print(f"[DEBUG] 받는 사람: {receiver_email} / 보내는 사람: {sender_email}")
                     cursor.execute("SELECT USER_ID FROM USER WHERE EMAIL = %s", (sender_email,))
                     sender_row = cursor.fetchone()
                     cursor.execute("SELECT USER_ID FROM USER WHERE EMAIL = %s", (receiver_email,))

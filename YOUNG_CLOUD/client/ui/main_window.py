@@ -45,6 +45,9 @@ class MainWindow(QMainWindow):
         self.resize(1100, 750)
         self.user_info = user_info or {}
         self.user_name = self.user_info.get("name", "사용자")
+        # 💡 [추가] 메인 윈도우에서 사용할 공용 네트워크 클라이언트 초기화
+        from network_client import NetworkClient
+        self.net_client = NetworkClient()
         
         # 관리자 여부 확인 (서버 응답 키값에 따라 소문자/대문자 모두 대응)
         self.is_admin = bool(
@@ -416,12 +419,11 @@ class MainWindow(QMainWindow):
 
     def on_submenu_clicked(self, item):
         """서브메뉴의 개별 항목을 클릭했을 때 호출"""
-        """서브메뉴의 개별 항목을 클릭했을 때 호출"""
         menu_text = item.text()
         
         # 💡 "메시지 보내기"를 클릭한 경우: 메인 영역 스택을 바꾸지 않고 팝업 다이얼로그 띄우기
         if menu_text == "메시지 보내기":
-            current_user_email = self.user_info.get("email", "user@example.com")
+            current_user_email = self.user_info.get("email")
             net_client = getattr(self, 'net_client', None)
             
             # 'send' 모드로 메시지 보내기 다이얼로그 호출
