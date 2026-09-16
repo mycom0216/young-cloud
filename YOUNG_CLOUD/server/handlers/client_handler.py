@@ -299,7 +299,34 @@ class ClientHandler(threading.Thread):
                             "status": "success", 
                             "message": "서비스 등급 변경 성공",
                             "service_id": service_id
-                        }                         
+                        }
+                        
+                # ==========================================
+                #  사용자 이름 변경 요청 처리
+                # ==========================================
+                elif action == "update_user_name":
+                    email = data.get("email")
+                    name = data.get("name")
+                    if not email or not name:
+                        response = {"status": "fail", "message": "이름 정보가 올바르지 않습니다."}
+                    else:
+                        cursor.execute("UPDATE USER SET NAME = %s WHERE EMAIL = %s", (name, email))
+                        conn.commit()
+                        response = {"status": "success", "message": "이름이 성공적으로 변경되었습니다."}
+
+                # ==========================================
+                # 사용자 비밀번호 변경 요청 처리
+                # ==========================================
+                elif action == "update_user_password":
+                    email = data.get("email")
+                    password = data.get("password")
+                    if not email or not password:
+                        response = {"status": "fail", "message": "비밀번호 정보가 올바르지 않습니다."}
+                    else:
+                        hashed_pw = hashlib.sha256(password.encode("utf-8")).hexdigest()
+                        cursor.execute("UPDATE USER SET PASSWORD_HASH = %s WHERE EMAIL = %s", (hashed_pw, email))
+                        conn.commit()
+                        response = {"status": "success", "message": "비밀번호가 성공적으로 변경되었습니다."}                                     
                 
                 
                 
