@@ -49,8 +49,9 @@ class ClientHandler(threading.Thread):
                 cursor = conn.cursor()
                 
                 response = {"status": "fail", "message": "알 수 없는 요청입니다."}
-
+                # ===========================================
                 # 1. 로그인 요청 처리
+                # ===========================================
                 if action == "login":
                     user_id = data.get("user_id")
                     password = data.get("password")
@@ -73,8 +74,9 @@ class ClientHandler(threading.Thread):
                         }
                     else:
                         response = {"status": "fail", "message": "아이디 또는 비밀번호가 틀렸습니다."}
-
+                # ===========================================
                 # 2. 이메일 인증코드 발송 요청 처리 (서버 내부에서 직접 yagmail 처리)
+                # ===========================================
                 elif action == "send_email":
                     email = data.get("email")
                     if not email:
@@ -106,8 +108,9 @@ class ClientHandler(threading.Thread):
                     except Exception as mail_err:
                         print(f"[이메일 전송 실패] {mail_err}")
                         response = {"status": "fail", "message": "이메일 전송에 실패했습니다. 이메일 주소를 확인해주세요."}
-
+                # ===========================================
                 # 3. 회원가입 정보 등록 요청 처리 (데이터 정의서 스키마 반영)
+                # ===========================================
                 elif action == "signup":
                     email = data.get("email")
                     password = data.get("password")
@@ -135,6 +138,81 @@ class ClientHandler(threading.Thread):
                         conn.commit()
                         
                         response = {"status": "success", "message": "회원가입이 완료되었습니다!"}
+                # ===========================================
+                # 4. 받은 메시지 목록 조회 요청 처리
+                # ==========================================
+                elif action == "message_received":
+                    email = data.get("email")
+                    
+                    # 1) 이메일로 현재 사용자의 USER_ID 조회
+                    cursor.execute("SELECT USER_ID FROM USER WHERE EMAIL = %s", (email,))
+                    user_row = cursor.fetchone()
+                    if not user_row:
+                        return {"status": "fail", "message": "사용자 정보를 찾을 수 없습니다."}
+                    user_id = user_row['USER_ID']
+                    
+                    # 2) MESSAGE 테이블에서 내가 받은 메시지 조회 (보낸 사람의 이메일도 함께 가져오기 위해 JOIN 사용)
+                    sql = """
+                        SELECT m.MESSAGE_ID, u.EMAIL as SENDER_EMAIL, m.CONTENT, m.IS_READ, m.CREATED_AT
+                        FROM MESSAGE m
+                        JOIN USER u ON m.SENDER_ID = u.USER_ID
+                        WHERE m.RECEIVER_ID = %s
+                        ORDER BY m.CREATED_AT DESC
+                    """
+                    cursor.execute(sql, (user_id,))
+                    messages = cursor.fetchall()
+                    
+                    # 날짜 형식 문자열 변환 (JSON 직렬화를 위함)
+                    for msg in messages:
+                        if msg.get('CREATED_AT'):
+                            msg['CREATED_AT'] = str(msg['CREATED_AT'])
+                            
+                    response = {"status": "success", "messages": messages}
+
+                # ==========================================
+                # 5. 메시지 전송(답장 포함) 요청 처리
+                # ==========================================
+                elif action == "message_send":
+                    sender_email = data.get("sender")
+                    receiver_email = data.get("receiver")
+                    content = data.get("content")
+                    
+                    cursor.execute("SELECT USER_ID FROM USER WHERE EMAIL = %s", (sender_email,))
+                    sender_row = cursor.fetchone()
+                    cursor.execute("SELECT USER_ID FROM USER WHERE EMAIL = %s", (receiver_email,))
+                    receiver_row = cursor.fetchone()
+                    
+                    if not sender_row or not receiver_row:
+                        response = {"status": "fail", "message": "수신자 또는 송신자 정보를 찾을 수 없습니다."}
+                    else:
+                        # MESSAGE 테이블에 INSERT 실행
+                        sql = """
+                            INSERT INTO MESSAGE (SENDER_ID, RECEIVER_ID, CONTENT, IS_READ)
+                            VALUES (%s, %s, %s, FALSE)
+                        """
+                        cursor.execute(sql, (sender_row['USER_ID'], receiver_row['USER_ID'], content))
+                        conn.commit()
+                        response = {"status": "success", "message": "메시지가 성공적으로 저장 및 전송되었습니다."}
+
+                # ==========================================
+                # 6. 메시지 삭제 요청 처리
+                # ==========================================
+                elif action == "message_delete":
+                    message_ids = data.get("message_ids", [])
+                    if not message_ids:
+                        response = {"status": "fail", "message": "삭제할 메시지가 선택되지 않았습니다."}
+                    else:
+                        # 전달받은 ID 리스트에 해당하는 메시지 삭제
+                        format_strings = ','.join(['%s'] * len(message_ids))
+                        sql = f"DELETE FROM MESSAGE WHERE MESSAGE_ID IN ({format_strings})"
+                        cursor.execute(sql, tuple(message_ids))
+                        conn.commit()
+                        response = {"status": "success", "message": "선택한 메시지가 삭제되었습니다."}
+                
+                
+                
+                
+                
                 
             except Exception as e:
                 response = {"status": "error", "message": f"데이터베이스 오류: {str(e)}"}

@@ -50,6 +50,35 @@ class NetworkClient:
         if self.sock:
             self.sock.close()
             self.sock = None
+            
+            
+# ==========================================
+    # 💡 메시지 관련 통신 함수들
+    # ==========================================
+    def get_received_messages(self, email):
+        """서버로 내가 받은 메시지 목록 조회를 요청합니다."""
+        return self.send_request("message_received", {"email": email})
+
+    def send_message(self, sender_email, receiver_email, content):
+        """서버로 다른 사용자에게 메시지 전송을 요청합니다."""
+        return self.send_request("message_send", {
+            "sender": sender_email,
+            "receiver": receiver_email,
+            "content": content
+        })
+    
+    
+    def delete_messages(self, message_ids):
+        """서버로 선택한 메시지들의 삭제를 요청합니다."""
+        return self.send_request("message_delete", {"message_ids": message_ids})
+
+    def close(self):
+        """서버와의 연결을 안전하게 끊는 함수"""
+        if self.sock:
+            self.sock.close()
+            self.sock = None            
+            
+            
 
 
 # ==========================================

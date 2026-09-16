@@ -22,6 +22,8 @@ from PySide6.QtWidgets import (
 from dialog.home_widget import HomeWidget
 from dialog.home_widget import CalenderWidget
 from settings_window import ServiceSettingWidget
+from message_window import MessageWidget, MessageDialog
+
 
 # 💡 아직 개발되지 않은 메뉴들을 위한 임시 안내 화면 클래스
 class PlaceholderView(QWidget):
@@ -380,17 +382,13 @@ class MainWindow(QMainWindow):
                 # 사용자 이메일 정보를 함께 전달 (user_info에 email 정보가 있다면 활용)
                 user_email = self.user_info.get("email", "user@example.com")
                 self.content_pages[name] = ServiceSettingWidget(user_email=user_email)    
+            elif name in ["받은메시지", "메시지함"]:  # 👈 메시지 위젯 연결
+                self.content_pages[name] = MessageWidget(self.user_info)
             else:
                 self.content_pages[name] = PlaceholderView(name)
 
 
     ### 여기까지 테스트용 코드
-
-
-
-
-
-
 
 
 
@@ -418,8 +416,39 @@ class MainWindow(QMainWindow):
 
     def on_submenu_clicked(self, item):
         """서브메뉴의 개별 항목을 클릭했을 때 호출"""
+        """서브메뉴의 개별 항목을 클릭했을 때 호출"""
         menu_text = item.text()
-        self.update_content_view(menu_text)
+        
+        # 💡 "메시지 보내기"를 클릭한 경우: 메인 영역 스택을 바꾸지 않고 팝업 다이얼로그 띄우기
+        if menu_text == "메시지 보내기":
+            current_user_email = self.user_info.get("email", "user@example.com")
+            net_client = getattr(self, 'net_client', None)
+            
+            # 'send' 모드로 메시지 보내기 다이얼로그 호출
+            dialog = MessageDialog(mode='send', current_user_email=current_user_email, net_client=net_client)
+            dialog.exec()
+        else:
+            # 그 외 일반 메뉴일 경우 기존처럼 우측 메인 영역 스택 페이지 전환
+            self.update_content_view(menu_text)
+            
+
+    # 서브메뉴바에서 메뉴를 클릭
+    def handle_menu_click(self, menu_name):
+        """사이드바/서브메뉴바에서 메뉴를 클릭했을 때의 동작 제어"""
+        if menu_name == "메시지 보내기":
+            # 💡 [요구사항 2 루트] 메인 area는 마지막으로 열린 스택위젯창을 유지한 채 팝업 띄우기
+            current_user_email = self.user_info.get("email", "user@example.com")
+            net_client = getattr(self, 'net_client', None)
+            
+            # 'send' 모드로 메시지 보내기 다이얼로그 호출
+            dialog = MessageDialog(mode='send', current_user_email=current_user_email, net_client=net_client)
+            dialog.exec()
+        else:
+            # 다른 일반 페이지 메뉴일 경우 스택 위젯 페이지 전환
+            if menu_name in self.content_pages:
+                self.stackedWidget.setCurrentWidget(self.content_pages[menu_name])    
+
+
 
     def update_content_view(self, menu_text):
         """우측 메인 컨텐츠 상단 경로명 업데이트"""
