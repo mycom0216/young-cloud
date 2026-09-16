@@ -25,6 +25,7 @@ from dialog.home_widget import HomeWidget
 from dialog.home_widget import CalenderWidget
 from settings_window import ServiceSettingWidget
 from message_window import MessageWidget, MessageDialog, SentMessageWidget
+from admin_window import AdminServiceWidget
 
 
 # 💡 아직 개발되지 않은 메뉴들을 위한 임시 안내 화면 클래스
@@ -87,6 +88,9 @@ class MainWindow(QMainWindow):
         # 4. 메인 컨텐츠 영역 생성 및 추가 (stretch=1을 주어 남은 공간을 꽉 채우게 함)
         self.init_content_area(main_layout)
         main_layout.addWidget(self.content_area, stretch=1)
+        
+        
+        
     def init_sidebar(self, parent_layout):
         self.sidebar = QWidget()
         self.sidebar.setStyleSheet("""
@@ -186,6 +190,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(logout_btn)
 
         parent_layout.addWidget(self.sidebar)
+
 
     def logout(self):
         """로그아웃 처리: 현재 메인 창을 닫고 로그인 창을 다시 엶"""
@@ -316,6 +321,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.submenu_stack)
         parent_layout.addWidget(self.submenu_container)
 
+
     def init_content_area(self, parent_layout):
         self.content_area = QWidget()
         self.content_area.setStyleSheet("background-color: #EFF8F1;")
@@ -397,7 +403,11 @@ class MainWindow(QMainWindow):
                 self.content_pages[name] = MessageWidget(self.user_info)
             
             elif name == "보낸메시지":
-                self.content_pages[name] = SentMessageWidget(self.user_info)    
+                self.content_pages[name] = SentMessageWidget(self.user_info)
+                
+            elif name == "서비스제한":
+                self.content_pages[name] = AdminServiceWidget(net_client=self.net_client)    
+                    
             else:
                 self.content_pages[name] = PlaceholderView(name)
 

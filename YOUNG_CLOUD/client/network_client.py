@@ -112,7 +112,19 @@ class NetworkClient:
             "password": password
         })            
             
+    # ==========================================
+    # 💡 [관리자] 사용자 차단 및 제한 관련 통신 함수
+    # ==========================================
+    def admin_get_users(self):
+        """서버로 관리자 권한의 전체 이용자 목록 조회를 요청합니다."""
+        return self.send_request("admin_get_users", {})
 
+    def admin_update_ban_status(self, email, is_banned):
+        """서버로 특정 사용자의 차단 상태(정지 True / 정상 False) 변경을 요청합니다."""
+        return self.send_request("admin_update_ban", {
+            "email": email,
+            "is_banned": is_banned
+        })
 
 # ==========================================
 # 💡 [호환성 유지 함수] login_window.py 대응
@@ -126,3 +138,5 @@ def send_login_request(email, password):
     })
     client.close()
     return response
+
+
