@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
 )
 
-
+#############hhhh
 
 # 상위 폴더(프로젝트 루트) 경로를 파이썬 경로에 추가하여 client.py를 임포트할 수 있도록 설정
 current_dir = os.path.dirname(os.path.abspath(__file__))
