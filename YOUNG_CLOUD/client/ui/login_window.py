@@ -313,6 +313,7 @@ class LoginWindow(QWidget):
         if response.get("status") == "success":
             QMessageBox.information(self, "성공", "로그인 성공!")
             self.open_main_window(response)
+            
         else:
             error_msg = response.get("message", "로그인에 실패했습니다.")
             QMessageBox.critical(self, "로그인 실패", error_msg)

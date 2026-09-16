@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>contentWidget</class>
+ <widget class="QWidget" name="contentWidget">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>750</width>
+    <height>710</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Form</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">QWidget#contentWidget {
+    background-color: #EFF8F1; /* 원하는 배경색 */
+}
+
+/* 2. 캘린더 위젯(QCalendarWidget)은 스타일 상속을 받지 않도록 별도로 기본 배경색 지정 */
+QCalendarWidget {
+    background-color: #FFFFFF; 
+	border-radius: 3px;
+}
+
+QCalendarWidget QWidget#qt_calendar_navigationbar {
+    background-color: #128BA6; /* 원하는 파란색 코드로 변경 가능 */
+}
+
+QCalendarWidget QAbstractItemView:enabled {
+    selection-background-color: #9CBF1F; /* 선택된 날짜의 배경색 (파란색) */
+    selection-color: #FFFFFF;            /* 선택된 날짜의 글자색 (흰색) */
+}
+
+</string>
+  </property>
+  <widget class="QCalendarWidget" name="calendarWidget">
+   <property name="geometry">
+    <rect>
+     <x>40</x>
+     <y>90</y>
+     <width>661</width>
+     <height>541</height>
+    </rect>
+   </property>
+   <property name="font">
+    <font>
+     <family>나눔스퀘어</family>
+     <bold>true</bold>
+    </font>
+   </property>
+   <property name="styleSheet">
+    <string notr="true"/>
+   </property>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

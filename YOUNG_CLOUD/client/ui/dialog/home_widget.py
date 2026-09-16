@@ -2,6 +2,8 @@ import os
 from PySide6.QtWidgets import QWidget
 from PySide6.QtGui import QIcon, QPixmap
 from .home_widget_ui import Ui_contentWidget
+from .calender_widget_ui import Ui_contentWidget as calender
+
 
 class HomeWidget(QWidget, Ui_contentWidget):
     def __init__(self, user_info=None):
@@ -41,3 +43,17 @@ class HomeWidget(QWidget, Ui_contentWidget):
                 selection-color: #FFFFFF;
             }
         """)    
+        
+class CalenderWidget(QWidget, calender):
+    def __init__(self):
+        super().__init__()
+        self.setupUi(self)        
+          # 💡 [추가] 캘린더 날짜 영역 배경을 밝게 잡아주는 스타일시트 적용
+        self.calendarWidget.setStyleSheet("""
+            QCalendarWidget QAbstractItemView {
+                background-color: #FFFFFF;
+                color: #333333;
+                selection-background-color: #9CBF1F;
+                selection-color: #FFFFFF;
+                    }
+                """)   

@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from dialog.home_widget import HomeWidget
-
+from dialog.home_widget import CalenderWidget
 
 # 💡 아직 개발되지 않은 메뉴들을 위한 임시 안내 화면 클래스
 class PlaceholderView(QWidget):
@@ -373,6 +373,9 @@ class MainWindow(QMainWindow):
         for name in all_menu_names:
             if name == "홈 메인":
                 self.content_pages[name] = HomeWidget(self.user_info)
+            elif name == "달력보기":
+                self.content_pages[name] = CalenderWidget()
+                    
             else:
                 self.content_pages[name] = PlaceholderView(name)
 
