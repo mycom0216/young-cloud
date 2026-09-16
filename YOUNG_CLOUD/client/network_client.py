@@ -85,8 +85,18 @@ class NetworkClient:
         """서버와의 연결을 안전하게 끊는 함수"""
         if self.sock:
             self.sock.close()
-            self.sock = None            
-            
+            self.sock = None
+                        
+    def get_user_service(self, email):
+        """서버로 사용자의 현재 서비스 등급 정보를 요청합니다."""
+        return self.send_request("get_user_service", {"email": email})
+
+    def update_user_service(self, email, grade_name):
+        """서버로 사용자의 서비스 등급 변경을 요청합니다."""
+        return self.send_request("settings_tier_update", {
+            "email": email, 
+            "grade_name": grade_name
+        })            
             
 
 

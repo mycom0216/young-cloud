@@ -223,6 +223,7 @@ class ClientHandler(threading.Thread):
                         cursor.execute(sql, tuple(message_ids))
                         conn.commit()
                         response = {"status": "success", "message": "선택한 메시지가 삭제되었습니다."}
+<<<<<<< HEAD
                 
                 # ==========================================
                 # 보낸 메시지 목록 조회 요청 처리
@@ -251,6 +252,58 @@ class ClientHandler(threading.Thread):
                             
                     response = {"status": "success", "messages": messages}
                 
+=======
+
+                # ==========================================
+                # 7. 서비스 등급 조회 요청 처리 (NEW)
+                # ==========================================
+                elif action == "get_user_service":
+                    email = data.get("email")
+                    sql = """
+                        SELECT u.EMAIL, u.SERVICE_ID, s.GRADE_NAME, s.MAX_STORAGE
+                        FROM USER u
+                        JOIN SERVICE s ON u.SERVICE_ID = s.SERVICE_ID
+                        WHERE u.EMAIL = %s
+                    """
+                    cursor.execute(sql, (email,))
+                    user_service = cursor.fetchone()
+                    
+                    if user_service:
+                        response = {
+                            "status": "success",
+                            "service_id": user_service['SERVICE_ID'],
+                            "grade_name": user_service['GRADE_NAME'],
+                            "max_storage": user_service['MAX_STORAGE']
+                        }
+                    else:
+                        response = {"status": "fail", "message": "사용자 등급 정보를 가져오지 못했습니다."}
+
+                # ==========================================
+                # 8. 서비스 등급 변경 요청 처리 (NEW)
+                # ==========================================
+                elif action == "settings_tier_update":
+                    email = data.get("email")
+                    grade_name = data.get("grade_name")
+                    service_id = data.get("service_id")
+
+                    # 등급 이름만 넘어왔을 경우 SERVICE 테이블에서 SERVICE_ID 조회
+                    if not service_id and grade_name:
+                        cursor.execute("SELECT SERVICE_ID FROM SERVICE WHERE GRADE_NAME = %s", (grade_name,))
+                        s_row = cursor.fetchone()
+                        if s_row:
+                            service_id = s_row['SERVICE_ID']
+
+                    if not service_id:
+                        response = {"status": "fail", "message": "유효하지 않은 서비스 등급 정보입니다."}
+                    else:
+                        cursor.execute("UPDATE USER SET SERVICE_ID = %s WHERE EMAIL = %s", (service_id, email))
+                        conn.commit()
+                        response = {
+                            "status": "success", 
+                            "message": "서비스 등급 변경 성공",
+                            "service_id": service_id
+                        }                         
+>>>>>>> 0908097701e7305813cc293211822b648c164be5
                 
                 
                 

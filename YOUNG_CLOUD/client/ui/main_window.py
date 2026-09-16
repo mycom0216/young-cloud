@@ -388,7 +388,11 @@ class MainWindow(QMainWindow):
             elif name == "서비스 확인 및 변경":  # 👈 이 조건문을 추가합니다
                 # 사용자 이메일 정보를 함께 전달 (user_info에 email 정보가 있다면 활용)
                 user_email = self.user_info.get("email", "user@example.com")
-                self.content_pages[name] = ServiceSettingWidget(user_email=user_email)    
+                self.content_pages[name] = ServiceSettingWidget(user_email=user_email)
+                self.content_pages[name] = ServiceSettingWidget(
+                                    user_email=user_email, 
+                                    net_client=self.net_client
+                                )    
             elif name in ["받은메시지", "메시지함"]:  # 👈 메시지 위젯 연결
                 self.content_pages[name] = MessageWidget(self.user_info)
             
