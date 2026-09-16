@@ -85,10 +85,46 @@ class NetworkClient:
         """서버와의 연결을 안전하게 끊는 함수"""
         if self.sock:
             self.sock.close()
-            self.sock = None            
-            
-            
+            self.sock = None
+                        
+    def get_user_service(self, email):
+        """서버로 사용자의 현재 서비스 등급 정보를 요청합니다."""
+        return self.send_request("get_user_service", {"email": email})
 
+    def update_user_service(self, email, grade_name):
+        """서버로 사용자의 서비스 등급 변경을 요청합니다."""
+        return self.send_request("settings_tier_update", {
+            "email": email, 
+            "grade_name": grade_name
+        })
+        
+    def update_user_name(self, email, name):
+        """서버로 사용자 이름 변경을 요청합니다."""
+        return self.send_request("update_user_name", {
+            "email": email,
+            "name": name
+        })
+
+    def update_user_password(self, email, password):
+        """서버로 사용자 비밀번호 변경을 요청합니다."""
+        return self.send_request("update_user_password", {
+            "email": email,
+            "password": password
+        })            
+            
+    # ==========================================
+    # 💡 [관리자] 사용자 차단 및 제한 관련 통신 함수
+    # ==========================================
+    def admin_get_users(self):
+        """서버로 관리자 권한의 전체 이용자 목록 조회를 요청합니다."""
+        return self.send_request("admin_get_users", {})
+
+    def admin_update_ban_status(self, email, is_banned):
+        """서버로 특정 사용자의 차단 상태(정지 True / 정상 False) 변경을 요청합니다."""
+        return self.send_request("admin_update_ban", {
+            "email": email,
+            "is_banned": is_banned
+        })
 
 # ==========================================
 # 💡 [호환성 유지 함수] login_window.py 대응
@@ -102,3 +138,5 @@ def send_login_request(email, password):
     })
     client.close()
     return response
+
+

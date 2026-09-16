@@ -25,6 +25,7 @@ from dialog.home_widget import HomeWidget
 from dialog.home_widget import CalenderWidget
 from settings_window import ServiceSettingWidget
 from message_window import MessageWidget, MessageDialog, SentMessageWidget
+from admin_window import AdminServiceWidget
 
 
 # 💡 아직 개발되지 않은 메뉴들을 위한 임시 안내 화면 클래스
@@ -87,6 +88,9 @@ class MainWindow(QMainWindow):
         # 4. 메인 컨텐츠 영역 생성 및 추가 (stretch=1을 주어 남은 공간을 꽉 채우게 함)
         self.init_content_area(main_layout)
         main_layout.addWidget(self.content_area, stretch=1)
+        
+        
+        
     def init_sidebar(self, parent_layout):
         self.sidebar = QWidget()
         self.sidebar.setStyleSheet("""
@@ -186,6 +190,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(logout_btn)
 
         parent_layout.addWidget(self.sidebar)
+
 
     def logout(self):
         """로그아웃 처리: 현재 메인 창을 닫고 로그인 창을 다시 엶"""
@@ -316,6 +321,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.submenu_stack)
         parent_layout.addWidget(self.submenu_container)
 
+
     def init_content_area(self, parent_layout):
         self.content_area = QWidget()
         self.content_area.setStyleSheet("background-color: #EFF8F1;")
@@ -388,12 +394,20 @@ class MainWindow(QMainWindow):
             elif name == "서비스 확인 및 변경":  # 👈 이 조건문을 추가합니다
                 # 사용자 이메일 정보를 함께 전달 (user_info에 email 정보가 있다면 활용)
                 user_email = self.user_info.get("email", "user@example.com")
-                self.content_pages[name] = ServiceSettingWidget(user_email=user_email)    
+                self.content_pages[name] = ServiceSettingWidget(user_email=user_email)
+                self.content_pages[name] = ServiceSettingWidget(
+                                    user_email=user_email, 
+                                    net_client=self.net_client
+                                )    
             elif name in ["받은메시지", "메시지함"]:  # 👈 메시지 위젯 연결
                 self.content_pages[name] = MessageWidget(self.user_info)
             
             elif name == "보낸메시지":
-                self.content_pages[name] = SentMessageWidget(self.user_info)    
+                self.content_pages[name] = SentMessageWidget(self.user_info)
+                
+            elif name == "서비스제한":
+                self.content_pages[name] = AdminServiceWidget(net_client=self.net_client)    
+                    
             else:
                 self.content_pages[name] = PlaceholderView(name)
 
@@ -428,16 +442,15 @@ class MainWindow(QMainWindow):
         """서브메뉴의 개별 항목을 클릭했을 때 호출"""
         menu_text = item.text()
         
-        # 💡 "메시지 보내기"를 클릭한 경우: 메인 영역 스택을 바꾸지 않고 팝업 다이얼로그 띄우기
+        # "메시지 보내기"를 클릭한 경우
         if menu_text == "메시지 보내기":
             current_user_email = self.user_info.get("email")
             net_client = getattr(self, 'net_client', None)
             
-            # 'send' 모드로 메시지 보내기 다이얼로그 호출
-            dialog = MessageDialog(mode='send', current_user_email=current_user_email, net_client=net_client)
+            # 👇 user_info=self.user_info 를 꼭 함께 넘겨주어야 합니다!
+            dialog = MessageDialog(mode='send', current_user_email=current_user_email, net_client=net_client, user_info=self.user_info)
             dialog.exec()
         else:
-            # 그 외 일반 메뉴일 경우 기존처럼 우측 메인 영역 스택 페이지 전환
             self.update_content_view(menu_text)
             
 
@@ -445,15 +458,13 @@ class MainWindow(QMainWindow):
     def handle_menu_click(self, menu_name):
         """사이드바/서브메뉴바에서 메뉴를 클릭했을 때의 동작 제어"""
         if menu_name == "메시지 보내기":
-            # 💡 [요구사항 2 루트] 메인 area는 마지막으로 열린 스택위젯창을 유지한 채 팝업 띄우기
             current_user_email = self.user_info.get("email", "user@example.com")
             net_client = getattr(self, 'net_client', None)
             
-            # 'send' 모드로 메시지 보내기 다이얼로그 호출
-            dialog = MessageDialog(mode='send', current_user_email=current_user_email, net_client=net_client)
+            # 👇 여기도 마찬가지로 user_info=self.user_info 추가!
+            dialog = MessageDialog(mode='send', current_user_email=current_user_email, net_client=net_client, user_info=self.user_info)
             dialog.exec()
         else:
-            # 다른 일반 페이지 메뉴일 경우 스택 위젯 페이지 전환
             if menu_name in self.content_pages:
                 self.stackedWidget.setCurrentWidget(self.content_pages[menu_name])    
 
