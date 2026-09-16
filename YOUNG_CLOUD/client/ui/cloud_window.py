@@ -18,24 +18,15 @@ from PySide6.QtWidgets import (
     QHeaderView,
 )
 
-# 실행 방식에 따라 두 가지 import를 차례로 시도합니다.
-try:
-    from ..network_client import NetworkClient
-except ImportError:
-    try:
-        from network_client import NetworkClient
-    except ImportError:
-        NetworkClient = None
-
 
 class CloudClient:
-    """클라우드 관련 서버 요청을 담당하는 클래스"""
+    """클라우드 관련 서버 요청을 처리하는 클래스"""
 
     def __init__(self, net_client=None):
         self.net_client = net_client
 
     def upload_file(self, file_path):
-        """파일 업로드 요청"""
+        """선택한 파일의 업로드 요청을 서버에 보냅니다."""
 
         file_name = os.path.basename(file_path)
         file_size = os.path.getsize(file_path)
@@ -49,15 +40,14 @@ class CloudClient:
                 }
             )
 
-        # 서버 연결 전 테스트용 응답
-        print(f"[테스트] 업로드 요청: {file_name}")
+        # 서버 미연결 상태에서 UI를 확인하기 위한 테스트 응답입니다.
         return {
             "status": "success",
-            "message": "업로드 요청 완료",
+            "message": f"{file_name} 업로드 요청 완료",
         }
 
     def download_file(self, file_id):
-        """파일 다운로드 요청"""
+        """다운로드 요청을 서버에 보냅니다."""
 
         if self.net_client:
             return self.net_client.send_request(
@@ -67,34 +57,63 @@ class CloudClient:
                 }
             )
 
-        # 서버 연결 전 테스트용 응답
-        print(f"[테스트] 다운로드 요청: {file_id}")
         return {
             "status": "success",
             "message": "다운로드 요청 완료",
         }
 
+    def move_to_trash(self, file_id):
+        """파일을 휴지통으로 이동합니다."""
+
+        if self.net_client:
+            return self.net_client.send_request(
+                "cloud_move_to_trash",
+                {
+                    "file_id": file_id,
+                }
+            )
+
+        return {
+            "status": "success",
+            "message": "휴지통으로 이동했습니다.",
+        }
+
+    def delete_from_trash(self, file_id):
+        """휴지통 파일을 영구 삭제합니다."""
+
+        if self.net_client:
+            return self.net_client.send_request(
+                "cloud_delete_permanently",
+                {
+                    "file_id": file_id,
+                }
+            )
+
+        return {
+            "status": "success",
+            "message": "영구 삭제했습니다.",
+        }
+
 
 class FileTransferDialog(QDialog):
-    """파일 올리기와 파일 받기에 사용하는 공통 팝업"""
+    """파일 올리기 또는 파일 받기 팝업창"""
 
     def __init__(
         self,
         title,
-        folder_text,
-        cloud_client=None,
-        mode="upload",
+        mode,
+        cloud_client,
         files=None,
         parent=None,
     ):
         super().__init__(parent)
 
-        self.cloud_client = cloud_client
         self.mode = mode
+        self.cloud_client = cloud_client
         self.files = files or []
 
         self.setWindowTitle(title)
-        self.resize(360, 430)
+        self.resize(390, 430)
 
         self.setStyleSheet("""
             QDialog {
@@ -127,7 +146,6 @@ class FileTransferDialog(QDialog):
             QTableWidget {
                 background-color: white;
                 border: none;
-                gridline-color: #DDDDDD;
             }
 
             QHeaderView::section {
@@ -142,37 +160,55 @@ class FileTransferDialog(QDialog):
         main_layout.setContentsMargins(24, 20, 24, 20)
         main_layout.setSpacing(10)
 
+        # 팝업 제목
         title_label = QLabel(title)
         title_label.setStyleSheet(
             "font-size: 14pt; font-weight: bold;"
         )
         main_layout.addWidget(title_label)
 
+        # 구분선
         line = QFrame()
         line.setFrameShape(QFrame.Shape.HLine)
         main_layout.addWidget(line)
 
-        # 폴더 선택 영역
-        folder_layout = QHBoxLayout()
+        # 업로드는 파일 선택, 다운로드는 저장 폴더 선택
+        select_layout = QHBoxLayout()
 
-        folder_label = QLabel(folder_text)
+        if self.mode == "upload":
+            select_label = QLabel("올릴 파일 선택")
+        else:
+            select_label = QLabel("받을 폴더 선택")
 
-        self.folder_edit = QLineEdit()
-        self.folder_edit.setReadOnly(True)
-        self.folder_edit.setPlaceholderText(
-            "선택한 폴더가 표시됩니다"
-        )
+        self.path_edit = QLineEdit()
+        self.path_edit.setReadOnly(True)
 
-        folder_button = QPushButton("폴더선택")
-        folder_button.clicked.connect(self.select_folder)
+        if self.mode == "upload":
+            self.path_edit.setPlaceholderText(
+                "선택한 파일이 표시됩니다"
+            )
 
-        folder_layout.addWidget(folder_label)
-        folder_layout.addWidget(self.folder_edit, 1)
-        folder_layout.addWidget(folder_button)
+            select_button = QPushButton("파일선택")
+            select_button.clicked.connect(
+                self.select_files
+            )
+        else:
+            self.path_edit.setPlaceholderText(
+                "다운로드할 폴더가 표시됩니다"
+            )
 
-        main_layout.addLayout(folder_layout)
+            select_button = QPushButton("폴더선택")
+            select_button.clicked.connect(
+                self.select_download_folder
+            )
 
-        # 파일 목록
+        select_layout.addWidget(select_label)
+        select_layout.addWidget(self.path_edit, 1)
+        select_layout.addWidget(select_button)
+
+        main_layout.addLayout(select_layout)
+
+        # 파일 목록 테이블
         self.file_table = QTableWidget(0, 3)
         self.file_table.setHorizontalHeaderLabels(
             ["파일명", "상태", "크기"]
@@ -202,18 +238,21 @@ class FileTransferDialog(QDialog):
 
         main_layout.addWidget(self.file_table)
 
-        # 전송 버튼
+        # 전송 시작 버튼
         send_layout = QHBoxLayout()
         send_layout.addStretch()
 
         send_button = QPushButton("전송 시작")
-        send_button.clicked.connect(self.start_transfer)
+        send_button.clicked.connect(
+            self.start_transfer
+        )
 
         send_layout.addWidget(send_button)
         send_layout.addStretch()
 
         main_layout.addLayout(send_layout)
 
+        # 여백
         main_layout.addStretch()
 
         # 닫기 버튼
@@ -226,53 +265,63 @@ class FileTransferDialog(QDialog):
         close_layout.addWidget(close_button)
         main_layout.addLayout(close_layout)
 
-        # 다운로드 팝업이면 이미 선택된 파일을 표시합니다.
+        # 다운로드 팝업은 메인 화면에서 체크한 파일을 표시합니다.
         if self.mode == "download":
             self.load_download_files()
 
-    def select_folder(self):
-        """업로드 또는 다운로드 폴더 선택"""
+    def select_files(self):
+        """업로드할 파일을 여러 개 선택합니다."""
+
+        file_paths, _ = QFileDialog.getOpenFileNames(
+            self,
+            "업로드할 파일 선택",
+            "",
+            "모든 파일 (*.*)"
+        )
+
+        if not file_paths:
+            return
+
+        self.files = file_paths
+
+        first_file_name = os.path.basename(
+            file_paths[0]
+        )
+
+        if len(file_paths) == 1:
+            self.path_edit.setText(first_file_name)
+        else:
+            self.path_edit.setText(
+                f"{first_file_name} 외 {len(file_paths) - 1}개"
+            )
+
+        self.load_upload_files()
+
+    def select_download_folder(self):
+        """다운로드 파일을 저장할 폴더를 선택합니다."""
 
         folder_path = QFileDialog.getExistingDirectory(
             self,
-            "폴더 선택"
+            "다운로드할 폴더 선택"
         )
 
-        if not folder_path:
-            return
+        if folder_path:
+            self.path_edit.setText(folder_path)
 
-        self.folder_edit.setText(folder_path)
-
-        # 업로드일 때만 폴더 안의 파일을 읽습니다.
-        if self.mode == "upload":
-            self.load_upload_files(folder_path)
-
-    def load_upload_files(self, folder_path):
-        """업로드할 폴더 안의 파일 표시"""
+    def load_upload_files(self):
+        """선택한 업로드 파일을 테이블에 표시합니다."""
 
         self.file_table.setRowCount(0)
-        self.files.clear()
 
-        try:
-            file_names = os.listdir(folder_path)
-        except OSError as error:
-            QMessageBox.warning(
-                self,
-                "오류",
-                f"폴더를 읽을 수 없습니다.\n{error}"
-            )
-            return
-
-        for file_name in file_names:
-            file_path = os.path.join(folder_path, file_name)
-
+        for file_path in self.files:
             if not os.path.isfile(file_path):
                 continue
 
-            self.files.append(file_path)
-
             row = self.file_table.rowCount()
             self.file_table.insertRow(row)
+
+            file_name = os.path.basename(file_path)
+            file_size = os.path.getsize(file_path)
 
             self.file_table.setItem(
                 row,
@@ -288,12 +337,12 @@ class FileTransferDialog(QDialog):
                 row,
                 2,
                 QTableWidgetItem(
-                    f"{os.path.getsize(file_path):,} bytes"
+                    f"{file_size:,} bytes"
                 )
             )
 
     def load_download_files(self):
-        """다운로드할 원격 파일 목록 표시"""
+        """메인 화면에서 체크한 다운로드 대상 파일을 표시합니다."""
 
         self.file_table.setRowCount(0)
 
@@ -301,13 +350,10 @@ class FileTransferDialog(QDialog):
             row = self.file_table.rowCount()
             self.file_table.insertRow(row)
 
-            file_name = file_data.get("name", "")
-            file_size = file_data.get("size", "-")
-
             self.file_table.setItem(
                 row,
                 0,
-                QTableWidgetItem(file_name)
+                QTableWidgetItem(file_data["name"])
             )
             self.file_table.setItem(
                 row,
@@ -317,30 +363,22 @@ class FileTransferDialog(QDialog):
             self.file_table.setItem(
                 row,
                 2,
-                QTableWidgetItem(str(file_size))
+                QTableWidgetItem(file_data["size"])
             )
 
     def start_transfer(self):
-        """전송 시작"""
-
-        if not self.folder_edit.text():
-            QMessageBox.warning(
-                self,
-                "알림",
-                "먼저 폴더를 선택하세요."
-            )
-            return
-
-        if self.file_table.rowCount() == 0:
-            QMessageBox.warning(
-                self,
-                "알림",
-                "전송할 파일이 없습니다."
-            )
-            return
+        """업로드 또는 다운로드 요청을 처리합니다."""
 
         if self.mode == "upload":
-            for file_path in self.files:
+            if not self.files:
+                QMessageBox.warning(
+                    self,
+                    "파일 선택 필요",
+                    "업로드할 파일을 선택하세요."
+                )
+                return
+
+            for row, file_path in enumerate(self.files):
                 response = self.cloud_client.upload_file(
                     file_path
                 )
@@ -356,16 +394,30 @@ class FileTransferDialog(QDialog):
                     )
                     return
 
+                self.file_table.setItem(
+                    row,
+                    1,
+                    QTableWidgetItem("완료")
+                )
+
             QMessageBox.information(
                 self,
                 "파일 업로드",
-                "파일 업로드 요청이 완료되었습니다."
+                "선택한 파일의 업로드 요청이 완료되었습니다."
             )
 
         else:
-            for file_data in self.files:
+            if not self.path_edit.text():
+                QMessageBox.warning(
+                    self,
+                    "저장 위치 필요",
+                    "다운로드할 폴더를 선택하세요."
+                )
+                return
+
+            for row, file_data in enumerate(self.files):
                 response = self.cloud_client.download_file(
-                    file_data.get("id")
+                    file_data["id"]
                 )
 
                 if response.get("status") != "success":
@@ -379,22 +431,30 @@ class FileTransferDialog(QDialog):
                     )
                     return
 
+                self.file_table.setItem(
+                    row,
+                    1,
+                    QTableWidgetItem("완료")
+                )
+
             QMessageBox.information(
                 self,
                 "파일 다운로드",
-                "파일 다운로드 요청이 완료되었습니다."
+                "다운로드 요청이 완료되었습니다.\n"
+                f"저장 위치: {self.path_edit.text()}"
             )
-
-        self.accept()
 
 
 class CloudWindow(QWidget):
-    """클라우드 메인 화면"""
+    """내 파일 화면"""
 
     def __init__(self, net_client=None, parent=None):
         super().__init__(parent)
 
         self.cloud_client = CloudClient(net_client)
+
+        # 앱이 실행 중인 동안 휴지통 목록을 보관합니다.
+        self.trash_files = []
 
         self.setStyleSheet("""
             QWidget {
@@ -429,7 +489,7 @@ class CloudWindow(QWidget):
         self.load_sample_files()
 
     def init_ui(self):
-        """클라우드 화면 UI 구성"""
+        """내 파일 화면 UI 구성"""
 
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(20, 20, 20, 20)
@@ -464,15 +524,14 @@ class CloudWindow(QWidget):
         )
 
         self.file_table.verticalHeader().setVisible(False)
-        self.file_table.setSelectionBehavior(
-            QTableWidget.SelectionBehavior.SelectRows
-        )
         self.file_table.setEditTriggers(
             QTableWidget.EditTrigger.NoEditTriggers
         )
+        self.file_table.setSelectionBehavior(
+            QTableWidget.SelectionBehavior.SelectRows
+        )
 
         header = self.file_table.horizontalHeader()
-
         header.setSectionResizeMode(
             0,
             QHeaderView.ResizeMode.Fixed
@@ -506,23 +565,49 @@ class CloudWindow(QWidget):
             self.open_download_dialog
         )
         self.delete_button.clicked.connect(
-            self.delete_file
+            self.move_selected_to_trash
         )
 
     def open_upload_dialog(self):
-        """파일 올리기 팝업 표시"""
-
+        """파일 선택 방식의 업로드 팝업을 표시합니다."""
+    # 팝업 생성 시 parent(self)를 넘겨줍니다.
+        dialog = UploadDialog(self.net_client, self.user_email, self)
         dialog = FileTransferDialog(
-            "파일 올리기",
-            "올릴 폴더 선택",
-            self.cloud_client,
-            "upload",
+            title="파일 올리기",
+            mode="upload",
+            cloud_client=self.cloud_client,
             parent=self
+            
+        # 팝업창에서 업로드가 성공하여 self.accept()가 호출되고 닫히면 메인 테이블 자동 갱신
+    if dialog.exec() == QDialog.Accepted:
+        self.load_file_list()  # 바탕화면 파일 목록 재조회
         )
         dialog.exec()
 
     def open_download_dialog(self):
-        """파일 받기 팝업 표시"""
+        """체크된 파일을 다운로드 팝업에 표시합니다."""
+
+        selected_files = self.get_checked_files()
+
+        if not selected_files:
+            QMessageBox.warning(
+                self,
+                "선택 필요",
+                "다운로드할 파일을 체크해주세요."
+            )
+            return
+
+        dialog = FileTransferDialog(
+            title="파일 받기",
+            mode="download",
+            cloud_client=self.cloud_client,
+            files=selected_files,
+            parent=self
+        )
+        dialog.exec()
+
+    def get_checked_files(self):
+        """체크박스가 선택된 파일 정보를 반환합니다."""
 
         selected_files = []
 
@@ -534,38 +619,28 @@ class CloudWindow(QWidget):
 
             check_box = check_widget.findChild(QCheckBox)
 
-            if check_box and check_box.isChecked():
-                name_item = self.file_table.item(row, 1)
-                size_item = self.file_table.item(row, 4)
+            if not check_box or not check_box.isChecked():
+                continue
 
-                selected_files.append({
-                    "id": row,
-                    "name": name_item.text()
-                    if name_item else "",
-                    "size": size_item.text()
-                    if size_item else "-",
-                })
+            name_item = self.file_table.item(row, 1)
+            type_item = self.file_table.item(row, 2)
+            date_item = self.file_table.item(row, 3)
+            size_item = self.file_table.item(row, 4)
 
-        if not selected_files:
-            QMessageBox.warning(
-                self,
-                "선택 필요",
-                "다운로드할 파일을 체크해주세요."
-            )
-            return
+            selected_files.append({
+                "id": name_item.data(
+                    Qt.ItemDataRole.UserRole
+                ),
+                "name": name_item.text(),
+                "type": type_item.text(),
+                "date": date_item.text(),
+                "size": size_item.text(),
+            })
 
-        dialog = FileTransferDialog(
-            "파일 받기",
-            "받을 폴더 선택",
-            self.cloud_client,
-            "download",
-            selected_files,
-            self
-        )
-        dialog.exec()
+        return selected_files
 
     def load_sample_files(self):
-        """테스트용 파일 목록"""
+        """UI 확인용 임시 파일 목록"""
 
         sample_files = [
             ["서비스 운영관리", "폴더", "2026-09-30", ""],
@@ -588,7 +663,7 @@ class CloudWindow(QWidget):
 
         self.file_table.setRowCount(0)
 
-        for file_data in sample_files:
+        for index, file_data in enumerate(sample_files):
             row = self.file_table.rowCount()
             self.file_table.insertRow(row)
 
@@ -612,23 +687,183 @@ class CloudWindow(QWidget):
                 file_data,
                 start=1
             ):
+                item = QTableWidgetItem(value)
+
+                # 서버의 실제 FILE_ID가 생기면 index 대신 그 값을 사용합니다.
+                if column == 1:
+                    item.setData(
+                        Qt.ItemDataRole.UserRole,
+                        index
+                    )
+
                 self.file_table.setItem(
                     row,
                     column,
-                    QTableWidgetItem(value)
+                    item
                 )
 
-    def delete_file(self):
-        """체크된 파일 삭제"""
+    def move_selected_to_trash(self):
+        """선택 파일을 영구 삭제하지 않고 휴지통으로 이동합니다."""
+
+        selected_files = self.get_checked_files()
+
+        if not selected_files:
+            QMessageBox.warning(
+                self,
+                "선택 필요",
+                "휴지통으로 옮길 파일을 체크해주세요."
+            )
+            return
+
+        answer = QMessageBox.question(
+            self,
+            "휴지통 이동",
+            "선택한 파일을 휴지통으로 이동할까요?",
+            QMessageBox.StandardButton.Yes |
+            QMessageBox.StandardButton.No
+        )
+
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+
+        for file_data in selected_files:
+            response = self.cloud_client.move_to_trash(
+                file_data["id"]
+            )
+
+            if response.get("status") != "success":
+                QMessageBox.warning(
+                    self,
+                    "이동 실패",
+                    response.get(
+                        "message",
+                        "휴지통 이동에 실패했습니다."
+                    )
+                )
+                return
+
+        # 테이블에서 체크된 행을 아래부터 제거합니다.
+        for row in reversed(range(self.file_table.rowCount())):
+            check_widget = self.file_table.cellWidget(row, 0)
+            check_box = check_widget.findChild(QCheckBox)
+
+            if check_box and check_box.isChecked():
+                self.file_table.removeRow(row)
+
+        self.trash_files.extend(selected_files)
+
+        QMessageBox.information(
+            self,
+            "휴지통 이동",
+            "선택한 파일을 휴지통으로 이동했습니다."
+        )
+
+
+class TrashWindow(QWidget):
+    """휴지통 화면"""
+
+    def __init__(self, cloud_client, trash_files, parent=None):
+        super().__init__(parent)
+
+        self.cloud_client = cloud_client
+        self.trash_files = trash_files
+
+        self.init_ui()
+        self.load_trash_files()
+
+    def init_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(12)
+
+        title = QLabel("> 휴지통")
+        title.setStyleSheet(
+            "font-size: 14pt; font-weight: bold;"
+        )
+        layout.addWidget(title)
+
+        self.permanent_delete_button = QPushButton(
+            "영구 삭제"
+        )
+        self.permanent_delete_button.clicked.connect(
+            self.delete_permanently
+        )
+        layout.addWidget(self.permanent_delete_button)
+
+        self.trash_table = QTableWidget(0, 5)
+        self.trash_table.setHorizontalHeaderLabels(
+            ["선택", "파일명", "종류", "삭제일", "용량"]
+        )
+
+        self.trash_table.verticalHeader().setVisible(False)
+
+        header = self.trash_table.horizontalHeader()
+        header.setSectionResizeMode(
+            0,
+            QHeaderView.ResizeMode.Fixed
+        )
+        header.setSectionResizeMode(
+            1,
+            QHeaderView.ResizeMode.Stretch
+        )
+
+        self.trash_table.setColumnWidth(0, 50)
+
+        layout.addWidget(self.trash_table)
+
+    def load_trash_files(self):
+        """휴지통 목록을 화면에 표시합니다."""
+
+        self.trash_table.setRowCount(0)
+
+        for file_data in self.trash_files:
+            row = self.trash_table.rowCount()
+            self.trash_table.insertRow(row)
+
+            check_box = QCheckBox()
+            check_widget = QWidget()
+            check_layout = QHBoxLayout(check_widget)
+
+            check_layout.setContentsMargins(0, 0, 0, 0)
+            check_layout.setAlignment(
+                Qt.AlignmentFlag.AlignCenter
+            )
+            check_layout.addWidget(check_box)
+
+            self.trash_table.setCellWidget(
+                row,
+                0,
+                check_widget
+            )
+
+            self.trash_table.setItem(
+                row,
+                1,
+                QTableWidgetItem(file_data["name"])
+            )
+            self.trash_table.setItem(
+                row,
+                2,
+                QTableWidgetItem(file_data["type"])
+            )
+            self.trash_table.setItem(
+                row,
+                3,
+                QTableWidgetItem(file_data["date"])
+            )
+            self.trash_table.setItem(
+                row,
+                4,
+                QTableWidgetItem(file_data["size"])
+            )
+
+    def delete_permanently(self):
+        """체크한 휴지통 파일을 완전히 삭제합니다."""
 
         rows_to_delete = []
 
-        for row in range(self.file_table.rowCount()):
-            check_widget = self.file_table.cellWidget(row, 0)
-
-            if check_widget is None:
-                continue
-
+        for row in range(self.trash_table.rowCount()):
+            check_widget = self.trash_table.cellWidget(row, 0)
             check_box = check_widget.findChild(QCheckBox)
 
             if check_box and check_box.isChecked():
@@ -638,15 +873,44 @@ class CloudWindow(QWidget):
             QMessageBox.warning(
                 self,
                 "선택 필요",
-                "삭제할 파일을 체크해주세요."
+                "영구 삭제할 파일을 체크해주세요."
             )
             return
 
+        answer = QMessageBox.warning(
+            self,
+            "영구 삭제",
+            "영구 삭제한 파일은 복구할 수 없습니다.\n계속할까요?",
+            QMessageBox.StandardButton.Yes |
+            QMessageBox.StandardButton.No
+        )
+
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+
         for row in reversed(rows_to_delete):
-            self.file_table.removeRow(row)
+            file_id = self.trash_files[row]["id"]
+
+            response = self.cloud_client.delete_from_trash(
+                file_id
+            )
+
+            if response.get("status") != "success":
+                QMessageBox.warning(
+                    self,
+                    "삭제 실패",
+                    response.get(
+                        "message",
+                        "영구 삭제에 실패했습니다."
+                    )
+                )
+                return
+
+            del self.trash_files[row]
+            self.trash_table.removeRow(row)
 
         QMessageBox.information(
             self,
             "삭제 완료",
-            "선택한 파일을 삭제했습니다."
+            "선택한 파일을 영구 삭제했습니다."
         )
