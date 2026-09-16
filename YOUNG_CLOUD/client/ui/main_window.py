@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 
 from dialog.home_widget import HomeWidget
 from dialog.home_widget import CalenderWidget
+from settings_window import ServiceSettingWidget
 
 # 💡 아직 개발되지 않은 메뉴들을 위한 임시 안내 화면 클래스
 class PlaceholderView(QWidget):
@@ -290,9 +291,9 @@ class MainWindow(QMainWindow):
                 elif i == 1: # 캘린더
                     items = ["달력보기"]
                 elif i == 2: # 클라우드
-                    items = ["내 파일", "공유 문서", "휴지통"]
+                    items = ["내 파일", "휴지통"]
                 elif i == 3: # 메시지
-                    items = ["메시지함", "메시지 보내기", "받은메시지", "보낸메시지"]
+                    items = ["받은메시지", "보낸메시지", "메시지 보내기"]
                 else: # 설정
                     items = ["서비스 확인 및 변경", "개인정보변경", "기본메시지 설정", "마무리메시지 설정", "블랙리스트 설정", "클라우드 설정"]
 
@@ -375,7 +376,10 @@ class MainWindow(QMainWindow):
                 self.content_pages[name] = HomeWidget(self.user_info)
             elif name == "달력보기":
                 self.content_pages[name] = CalenderWidget()
-                    
+            elif name == "서비스 확인 및 변경":  # 👈 이 조건문을 추가합니다
+                # 사용자 이메일 정보를 함께 전달 (user_info에 email 정보가 있다면 활용)
+                user_email = self.user_info.get("email", "user@example.com")
+                self.content_pages[name] = ServiceSettingWidget(user_email=user_email)    
             else:
                 self.content_pages[name] = PlaceholderView(name)
 
