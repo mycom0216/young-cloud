@@ -29,9 +29,9 @@ class MessageDialog(QDialog, Ui_MessageDialog):
     [메시지 다이얼로그 창 클래스]
     - mode == 'view' : 받은 메시지 상세 확인 및 답장 모드
     - mode == 'sent_view' : 보낸 메시지 상세 확인 모드 (입력창 비활성화, 확인 버튼)
-    - mode == 'send' : 신규 메시지 작성 모드
+    - mode == 'send' : 신규 메시지 작성 모드 (관리자 여부에 따라 전체 전송/개별 전송 분기)
     """
-    def __init__(self, mode='view', sender_email="", content="", current_user_email="", net_client=None, receiver_email=""):
+    def __init__(self, mode='view', sender_email="", content="", current_user_email="", net_client=None, receiver_email="", is_admin=False, user_info=None):
         super().__init__()
         self.setupUi(self)
         
@@ -41,6 +41,12 @@ class MessageDialog(QDialog, Ui_MessageDialog):
         self.current_user_email = current_user_email  
         self.net_client = net_client      
         
+        # 💡 [수정] user_info가 있으면 관리자 여부 자동 추출, 없으면 is_admin 값 사용
+        if user_info:
+            self.is_admin = bool(user_info.get("is_admin", user_info.get("IS_ADMIN", 0)))
+        else:
+            self.is_admin = bool(is_admin)
+        
         self.settings = QSettings("YoungCloud", "MessageApp")
         self.init_dialog_ui(content)
 
@@ -48,7 +54,12 @@ class MessageDialog(QDialog, Ui_MessageDialog):
         if self.mode == 'view':
             self.setWindowTitle("받은 메시지 상세")
             self.label_title.setText("보낸메시지")                  
-            self.label_2.setText(f"보낸 사람 : {self.sender_email}")  
+            
+            # 💡 [수정] 관리자일 경우 받은 메시지 상세에서도 보낸 사람 대신 전체 이용자 안내 표시 가능하나 원본 유지
+            if self.is_admin:
+                self.label_2.setText(f"보낸 사람 : {self.sender_email} (관리자 전체 전송 모드)")
+            else:
+                self.label_2.setText(f"보낸 사람 : {self.sender_email}")  
             
             self.lineEdit.setText(content)
             self.lineEdit.setReadOnly(True)                       
@@ -57,25 +68,25 @@ class MessageDialog(QDialog, Ui_MessageDialog):
             self.pushButton_send.clicked.connect(self.switch_to_reply_mode)
             
         elif self.mode == 'sent_view':
-            # ==========================================
-            # [루트 3] 보낸 메시지 상세 확인 모드
-            # ==========================================
             self.setWindowTitle("보낸 메시지 상세")
             self.label_title.setText("보낸메시지")
             self.label_2.setText(f"받는 사람 : {self.receiver_email}")
             
             self.lineEdit.setText(content)
-            self.lineEdit.setReadOnly(True)                      # 메시지 입력창 비활성화
+            self.lineEdit.setReadOnly(True)                      
             
-            self.pushButton_send.setText("확인")                 # 답장 버튼을 '확인'으로 변경
-            self.pushButton_send.clicked.connect(self.close)     # 클릭 시 창 닫기
+            self.pushButton_send.setText("확인")                 
+            self.pushButton_send.clicked.connect(self.close)     
 
         elif self.mode == 'send':
             self.setWindowTitle("메시지 보내기")
             self.label_title.setText("보낸메시지")
-            self.label_2.setText("받는 사람 : ")
             
-            self.setup_receiver_input()
+            if self.is_admin:
+                self.label_2.setText("받는 사람 : 전체 이용자")
+            else:
+                self.label_2.setText("받는 사람 : ")
+                self.setup_receiver_input()
             
             self.lineEdit.clear()
             self.lineEdit.setReadOnly(False)                      
@@ -120,19 +131,31 @@ class MessageDialog(QDialog, Ui_MessageDialog):
 
     def switch_to_reply_mode(self):
         self.label_title.setText("보낸메시지")
-        self.label_2.setText(f"받는 사람 : {self.sender_email}")
+        
+        # 💡 [수정] 관리자인 경우 답장 시에도 "전체 이용자"로 고정 처리
+        if self.is_admin:
+            self.label_2.setText("받는 사람 : 전체 이용자")
+            receiver_target = "ALL"
+        else:
+            self.label_2.setText(f"받는 사람 : {self.sender_email}")
+            receiver_target = self.sender_email
+
         self.lineEdit.clear()
         self.lineEdit.setReadOnly(False)
         self.lineEdit.setPlaceholderText("답장 내용을 입력하세요.")
         self.pushButton_send.setText("보내기")
         self.pushButton_send.clicked.disconnect()
-        self.pushButton_send.clicked.connect(lambda: self.send_message_process(receiver=self.sender_email))
+        self.pushButton_send.clicked.connect(lambda: self.send_message_process(receiver=receiver_target))
 
     def confirm_and_send(self):
-        receiver = self.receiver_input.text().strip()
-        if not receiver:
-            QMessageBox.warning(self, "경고", "받는 사람 아이디를 입력해주세요.")
-            return
+        if self.is_admin:
+            receiver = "ALL"
+        else:
+            receiver = self.receiver_input.text().strip()
+            if not receiver:
+                QMessageBox.warning(self, "경고", "받는 사람 아이디를 입력해주세요.")
+                return
+                
         self.send_message_process(receiver=receiver)
 
     def send_message_process(self, receiver):
@@ -141,8 +164,9 @@ class MessageDialog(QDialog, Ui_MessageDialog):
             QMessageBox.warning(self, "경고", "메시지 내용을 입력해주세요.")
             return
 
+        target_text = "전체 이용자" if self.is_admin else receiver
         reply = QMessageBox.question(
-            self, "메시지 전송 확인", "정말 메시지를 보낼까요?", 
+            self, "메시지 전송 확인", f"정말 [{target_text}]에게 메시지를 보낼까요?", 
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No
         )
 
@@ -150,14 +174,16 @@ class MessageDialog(QDialog, Ui_MessageDialog):
             if self.net_client:
                 res = self.net_client.send_message(self.current_user_email, receiver, content)
                 if res.get("status") == "success":
-                    self.save_recent_contact(receiver)
+                    if not self.is_admin:
+                        self.save_recent_contact(receiver)
                     QMessageBox.information(self, "성공", "메시지가 성공적으로 전송되었습니다.")
                     self.accept()
                 else:
                     QMessageBox.warning(self, "실패", res.get("message", "전송 실패"))
             else:
-                self.save_recent_contact(receiver)
-                QMessageBox.information(self, "성공", f"[{receiver}]에게 메시지 전송 완료!")
+                if not self.is_admin:
+                    self.save_recent_contact(receiver)
+                QMessageBox.information(self, "성공", f"[{target_text}]에게 메시지 전송 완료!")
                 self.accept()
 
 
@@ -168,7 +194,8 @@ class MessageWidget(QWidget):
         self.user_info = user_info or {}
         self.user_email = self.user_info.get("email", "user@example.com")
         self.net_client = NetworkClient() if NetworkClient else None
-        
+        print(f"[DEBUG] 전달받은 user_info: {self.user_info}")
+        print(f"[DEBUG] 관리자 여부(is_admin): {self.user_info.get('is_admin')}")
         self.current_page = 0
         self.items_per_page = 20
         self.all_messages = []
@@ -343,7 +370,8 @@ class MessageWidget(QWidget):
             except Exception:
                 pass
 
-        dialog = MessageDialog(mode='view', sender_email=sender, content=content, current_user_email=self.user_email, net_client=self.net_client)
+        # 💡 [수정] MessageDialog 호출 시 user_info 전달하여 관리자 권한 반영
+        dialog = MessageDialog(mode='view', sender_email=sender, content=content, current_user_email=self.user_email, net_client=self.net_client, user_info=self.user_info)
         dialog.exec()
         self.load_messages()
 
@@ -367,7 +395,7 @@ class MessageWidget(QWidget):
 
 
 class SentMessageWidget(QWidget):
-    """보낸 메시지함 화면 위젯 클래스 (받은 메시지와 동일 로직 및 요구사항 반영)"""
+    """보낸 메시지함 화면 위젯 클래스"""
     def __init__(self, user_info=None):
         super().__init__()
         self.user_info = user_info or {}
@@ -434,7 +462,6 @@ class SentMessageWidget(QWidget):
         top_layout.addWidget(self.delete_btn)
         main_layout.addLayout(top_layout)
 
-        # 💡 [요구사항 반영] 1. 컬럼명 수정 ("받는사람", "보낸 날짜") 및 읽음 구분 없음 (일반 두께)
         self.table = QTableWidget()
         self.table.setColumnCount(4)
         self.table.setHorizontalHeaderLabels(["", "받는사람", "내용", "보낸 날짜"])
@@ -499,7 +526,6 @@ class SentMessageWidget(QWidget):
         self.prev_btn.setEnabled(self.current_page > 0)
         self.next_btn.setEnabled(self.current_page < total_pages - 1)
 
-        # 💡 전체 일반 두께 적용 (볼드체 사용 안 함)
         font = QFont("나눔스퀘어", 9)
         font.setWeight(QFont.Normal)
 
@@ -541,8 +567,8 @@ class SentMessageWidget(QWidget):
         receiver = msg_data.get("RECEIVER_EMAIL")
         content = msg_data.get("CONTENT")
 
-        # 💡 [요구사항 반영] 2. 클릭 시 'sent_view' 모드 다이얼로그 호출 (확인 버튼, 입력창 비활성화)
-        dialog = MessageDialog(mode='sent_view', receiver_email=receiver, content=content, current_user_email=self.user_email, net_client=self.net_client)
+        # 💡 [수정] MessageDialog 호출 시 user_info 전달하여 관리자 권한 반영
+        dialog = MessageDialog(mode='sent_view', receiver_email=receiver, content=content, current_user_email=self.user_email, net_client=self.net_client, user_info=self.user_info)
         dialog.exec()
         self.load_messages()
 

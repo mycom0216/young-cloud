@@ -105,7 +105,7 @@ class ServiceSettingWidget(QWidget):
 
         tiers_info = [
             ("일반", "일반", "100MB"),
-            ("비즈니스", "비즈니스", "200MB"),
+            ("비지니스", "비지니스", "200MB"),
             ("VIP", "VIP", "500MB"),
             ("VVIP", "VVIP", "1GB")
         ]

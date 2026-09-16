@@ -432,16 +432,15 @@ class MainWindow(QMainWindow):
         """서브메뉴의 개별 항목을 클릭했을 때 호출"""
         menu_text = item.text()
         
-        # 💡 "메시지 보내기"를 클릭한 경우: 메인 영역 스택을 바꾸지 않고 팝업 다이얼로그 띄우기
+        # "메시지 보내기"를 클릭한 경우
         if menu_text == "메시지 보내기":
             current_user_email = self.user_info.get("email")
             net_client = getattr(self, 'net_client', None)
             
-            # 'send' 모드로 메시지 보내기 다이얼로그 호출
-            dialog = MessageDialog(mode='send', current_user_email=current_user_email, net_client=net_client)
+            # 👇 user_info=self.user_info 를 꼭 함께 넘겨주어야 합니다!
+            dialog = MessageDialog(mode='send', current_user_email=current_user_email, net_client=net_client, user_info=self.user_info)
             dialog.exec()
         else:
-            # 그 외 일반 메뉴일 경우 기존처럼 우측 메인 영역 스택 페이지 전환
             self.update_content_view(menu_text)
             
 
@@ -449,15 +448,13 @@ class MainWindow(QMainWindow):
     def handle_menu_click(self, menu_name):
         """사이드바/서브메뉴바에서 메뉴를 클릭했을 때의 동작 제어"""
         if menu_name == "메시지 보내기":
-            # 💡 [요구사항 2 루트] 메인 area는 마지막으로 열린 스택위젯창을 유지한 채 팝업 띄우기
             current_user_email = self.user_info.get("email", "user@example.com")
             net_client = getattr(self, 'net_client', None)
             
-            # 'send' 모드로 메시지 보내기 다이얼로그 호출
-            dialog = MessageDialog(mode='send', current_user_email=current_user_email, net_client=net_client)
+            # 👇 여기도 마찬가지로 user_info=self.user_info 추가!
+            dialog = MessageDialog(mode='send', current_user_email=current_user_email, net_client=net_client, user_info=self.user_info)
             dialog.exec()
         else:
-            # 다른 일반 페이지 메뉴일 경우 스택 위젯 페이지 전환
             if menu_name in self.content_pages:
                 self.stackedWidget.setCurrentWidget(self.content_pages[menu_name])    
 
