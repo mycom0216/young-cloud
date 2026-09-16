@@ -39,7 +39,7 @@ QCalendarWidget QAbstractItemView:enabled {
    <property name="geometry">
     <rect>
      <x>10</x>
-     <y>50</y>
+     <y>30</y>
      <width>391</width>
      <height>21</height>
     </rect>
@@ -57,9 +57,9 @@ QCalendarWidget QAbstractItemView:enabled {
   <widget class="QProgressBar" name="progressBar">
    <property name="geometry">
     <rect>
-     <x>10</x>
-     <y>120</y>
-     <width>391</width>
+     <x>20</x>
+     <y>105</y>
+     <width>401</width>
      <height>16</height>
     </rect>
    </property>
@@ -81,8 +81,8 @@ QCalendarWidget QAbstractItemView:enabled {
   <widget class="QLabel" name="label_bar_name">
    <property name="geometry">
     <rect>
-     <x>10</x>
-     <y>90</y>
+     <x>20</x>
+     <y>75</y>
      <width>381</width>
      <height>21</height>
     </rect>
@@ -97,30 +97,11 @@ QCalendarWidget QAbstractItemView:enabled {
     <string>등급 및 용량</string>
    </property>
   </widget>
-  <widget class="QLabel" name="label_2">
-   <property name="geometry">
-    <rect>
-     <x>440</x>
-     <y>180</y>
-     <width>141</width>
-     <height>21</height>
-    </rect>
-   </property>
-   <property name="font">
-    <font>
-     <family>나눔스퀘어</family>
-     <pointsize>11</pointsize>
-    </font>
-   </property>
-   <property name="text">
-    <string>캘린더</string>
-   </property>
-  </widget>
   <widget class="QLabel" name="label_3">
    <property name="geometry">
     <rect>
-     <x>10</x>
-     <y>210</y>
+     <x>17</x>
+     <y>150</y>
      <width>210</width>
      <height>100</height>
     </rect>
@@ -138,8 +119,8 @@ QCalendarWidget QAbstractItemView:enabled {
   <widget class="QLabel" name="label_4">
    <property name="geometry">
     <rect>
-     <x>10</x>
-     <y>320</y>
+     <x>17</x>
+     <y>260</y>
      <width>210</width>
      <height>271</height>
     </rect>
@@ -157,8 +138,8 @@ QCalendarWidget QAbstractItemView:enabled {
   <widget class="QCalendarWidget" name="calendarWidget">
    <property name="geometry">
     <rect>
-     <x>440</x>
-     <y>210</y>
+     <x>447</x>
+     <y>150</y>
      <width>271</width>
      <height>381</height>
     </rect>
@@ -176,8 +157,8 @@ QCalendarWidget QAbstractItemView:enabled {
   <widget class="QLabel" name="label_5">
    <property name="geometry">
     <rect>
-     <x>232</x>
-     <y>210</y>
+     <x>239</x>
+     <y>150</y>
      <width>185</width>
      <height>101</height>
     </rect>
@@ -195,8 +176,8 @@ QCalendarWidget QAbstractItemView:enabled {
   <widget class="QLabel" name="label_6">
    <property name="geometry">
     <rect>
-     <x>232</x>
-     <y>320</y>
+     <x>239</x>
+     <y>260</y>
      <width>185</width>
      <height>271</height>
     </rect>
@@ -209,6 +190,44 @@ QCalendarWidget QAbstractItemView:enabled {
    </property>
    <property name="scaledContents">
     <bool>true</bool>
+   </property>
+  </widget>
+  <widget class="QLabel" name="label_bar_name_2">
+   <property name="geometry">
+    <rect>
+     <x>259</x>
+     <y>612</y>
+     <width>381</width>
+     <height>21</height>
+    </rect>
+   </property>
+   <property name="font">
+    <font>
+     <family>나눔스퀘어</family>
+     <pointsize>10</pointsize>
+    </font>
+   </property>
+   <property name="text">
+    <string>&quot;0&quot;부터 무한대까지의 클라우드를 즐겨보세요!</string>
+   </property>
+  </widget>
+  <widget class="QLabel" name="label_bar_name_3">
+   <property name="geometry">
+    <rect>
+     <x>279</x>
+     <y>633</y>
+     <width>221</width>
+     <height>21</height>
+    </rect>
+   </property>
+   <property name="font">
+    <font>
+     <family>나눔스퀘어</family>
+     <pointsize>8</pointsize>
+    </font>
+   </property>
+   <property name="text">
+    <string>이용 문의 : hyun20260714@gmail.com</string>
    </property>
   </widget>
  </widget>

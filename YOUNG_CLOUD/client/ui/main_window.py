@@ -217,15 +217,18 @@ class MainWindow(QMainWindow):
         storage_layout = QVBoxLayout()
         storage_layout.setSpacing(5)
 
-        storage_label = QLabel("500MB | VIP")
-        storage_label.setStyleSheet("font-size: 11px; font-weight: bold; color: #333; background: transparent;")
-        storage_layout.addWidget(storage_label)
+        # 용량 및 등급 텍스트 라벨 (self. 붙여서 속성으로 지정)
+        self.storage_label = QLabel("0MB | 일반")
+        self.storage_label.setStyleSheet("font-size: 11px; font-weight: bold; color: #333; background: transparent;")
+        storage_layout.addWidget(self.storage_label)
+        
 
-        progress_bar = QProgressBar()
-        progress_bar.setValue(45)
-        progress_bar.setTextVisible(False)
-        progress_bar.setFixedHeight(6)
-        progress_bar.setStyleSheet("""
+        # 💡 [핵심 수정] self.을 반드시 붙여야 클래스 전체에서 인식할 수 있습니다!
+        self.storage_progress_bar = QProgressBar()
+        self.storage_progress_bar.setValue(0)
+        self.storage_progress_bar.setTextVisible(False)
+        self.storage_progress_bar.setFixedHeight(6)
+        self.storage_progress_bar.setStyleSheet("""
             QProgressBar {
                 background-color: #DCE5DE;
                 border: none;
@@ -236,20 +239,22 @@ class MainWindow(QMainWindow):
                 border-radius: 3px;
             }
         """)
-        storage_layout.addWidget(progress_bar)
+        storage_layout.addWidget(self.storage_progress_bar)
 
         layout.addLayout(storage_layout)
-        layout.addSpacing(12)
+        
+        # 서버로부터 사용자 용량 및 등급 정보를 불러와서 사이드바 UI 업데이트 실행
+        self.load_and_update_storage_info()
+        
+        # 💡 [추가] 용량 게이지와 서브메뉴 사이의 간격 및 가로선(구분선) 배치
+        layout.addSpacing(4)
 
-        # 구분선 추가
-        line = QFrame()
-        line.setFrameShape(QFrame.HLine)
-        line.setFrameShadow(QFrame.Sunken)
-        line.setStyleSheet("color: #D0D8D2; background-color: #D0D8D2;")
-        line.setFixedHeight(1)
+        line = QWidget()
+        line.setFixedHeight(2)
+        line.setStyleSheet("background-color: #D0D8D2;")  # 연한 회록색 계열 선 색상
         layout.addWidget(line)
 
-        layout.addSpacing(15)
+        layout.addSpacing(8)
 
         self.submenu_stack = QStackedWidget()
         self.submenu_stack.setStyleSheet("background: transparent;")
@@ -269,8 +274,9 @@ class MainWindow(QMainWindow):
             title_label.setStyleSheet("font-weight: bold; font-size: 15px; color: #333;")
             p_layout.addWidget(title_label)
 
-            p_layout.addSpacing(15)
-
+            p_layout.addSpacing(10)
+            
+    
             sub_list = QListWidget()
             sub_list.setStyleSheet("""
                 QListWidget {
@@ -320,7 +326,47 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(self.submenu_stack)
         parent_layout.addWidget(self.submenu_container)
+        
+        
+    def load_and_update_storage_info(self):
+            """서버에서 현재 사용자의 사용량과 등급별 최대 용량을 가져와 사이드바에 반영합니다."""
+            user_email = self.user_info.get("email")
+            if not user_email or not self.net_client:
+                return
 
+            res = self.net_client.get_user_storage_info(user_email)
+            if res.get("status") == "success":
+                grade_name = res.get("grade_name", "일반")
+                max_storage_bytes = res.get("max_storage", 500 * 1024 * 1024) # 기본 500MB
+                total_used_bytes = res.get("total_used", 0)
+
+                # 바이트(Bytes)를 MB 단위로 보기 쉽게 변환
+                used_mb = total_used_bytes / (1024 * 1024)
+                max_mb = max_storage_bytes / (1024 * 1024)
+
+                # 퍼센트 계산 (0 ~ 100)
+                if max_mb > 0:
+                    percent = int((total_used_bytes / max_storage_bytes) * 100)
+                    percent = min(max(percent, 0), 100) # 0~100 사이 보정
+                else:
+                    percent = 0
+
+                # 사이드바 라벨 및 프로그래스바 갱신 (예: "24MB / 500MB | VIP" 또는 간소화 형태)
+                if max_mb >= 1024:
+                    used_str = f"{used_mb / 1024:.1f}GB"
+                    max_str = f"{max_mb / 1024:.0f}GB"
+                else:
+                    used_str = f"{int(used_mb)}MB"
+                    max_str = f"{int(max_mb)}MB"
+
+                self.storage_label.setText(f"{used_str} / {max_str} | {grade_name}")
+                self.storage_progress_bar.setValue(percent)
+                
+                # 홈 위젯 등 하위 화면에서도 쓸 수 있도록 user_info에 담아둠
+                self.user_info["grade_name"] = grade_name
+                self.user_info["max_storage"] = max_storage_bytes
+                self.user_info["total_used"] = total_used_bytes
+                self.user_info["storage_percent"] = percent
 
     def init_content_area(self, parent_layout):
         self.content_area = QWidget()
@@ -334,6 +380,13 @@ class MainWindow(QMainWindow):
         self.path_label = QLabel("> 홈 메인")
         self.path_label.setStyleSheet("font-weight: bold; font-size: 13px; color: #222;")
         layout.addWidget(self.path_label)
+        
+        layout.setSpacing(19)
+        line = QWidget()
+        line.setFixedHeight(2)
+        line.setStyleSheet("background-color: #D0D8D2;")  # 연한 회록색 계열 선 색상
+        layout.addWidget(line)
+        
 
         # 메인 컨텐츠 화면 전환을 위한 QStackedWidget 설정
         self.content_stack = QStackedWidget()

@@ -379,7 +379,44 @@ class ClientHandler(threading.Thread):
             
             
             
-            
+            # ==========================================
+                # 💡 [추가] 사용자의 클라우드 용량 및 등급 정보 조회 요청 처리
+                # ==========================================
+                elif action == "get_user_storage_info":
+                    email = data.get("email")
+                    
+                    # 1. 사용자 정보 및 서비스 등급 조회
+                    cursor.execute("""
+                        SELECT u.USER_ID, s.GRADE_NAME, s.MAX_STORAGE
+                        FROM USER u
+                        JOIN SERVICE s ON u.SERVICE_ID = s.SERVICE_ID
+                        WHERE u.EMAIL = %s
+                    """, (email,))
+                    user_row = cursor.fetchone()
+                    
+                    if not user_row:
+                        response = {"status": "fail", "message": "사용자 정보를 찾을 수 없습니다."}
+                    else:
+                        user_id = user_row['USER_ID']
+                        grade_name = user_row['GRADE_NAME']
+                        max_storage = user_row['MAX_STORAGE'] # 바이트(Bytes) 단위 등급별 최대 용량
+                        
+                        # 2. FILE 테이블에서 해당 사용자가 업로드한 파일들의 총 용량 계산 (STATUS가 COMPLETED이거나 전체)
+                        cursor.execute("""
+                            SELECT SUM(FILE_SIZE) as TOTAL_USED 
+                            FROM FILE 
+                            WHERE USER_ID = %s
+                        """, (user_id,))
+                        storage_row = cursor.fetchone()
+                        
+                        total_used = storage_row['TOTAL_USED'] if storage_row and storage_row['TOTAL_USED'] else 0
+                        
+                        response = {
+                            "status": "success",
+                            "grade_name": grade_name,
+                            "max_storage": max_storage,
+                            "total_used": total_used
+                        }
             
             
             

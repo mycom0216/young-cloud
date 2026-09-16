@@ -2,7 +2,7 @@
 import sys
 import os
 from PySide6.QtCore import Qt, QStringListModel, QSettings, QTimer
-from PySide6.QtGui import QFont, QIcon, QCursor
+from PySide6.QtGui import QFont, QIcon, QCursor, QColor
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
     QLineEdit, QPushButton, QTableWidget, QTableWidgetItem, 
@@ -339,9 +339,17 @@ class MessageWidget(QWidget):
             self.table.setItem(row, 1, QTableWidgetItem(str(sender)))
             self.table.setItem(row, 2, QTableWidgetItem(str(content)))
             self.table.setItem(row, 3, QTableWidgetItem(str(date_str)))
+            # 1~3번 열의 폰트 및 읽음 여부에 따른 글자 색상 적용
             for c in range(1, 4):
-                self.table.item(row, c).setFont(font)
-
+                item = self.table.item(row, c)
+                item.setFont(font)
+                
+                # 💡 [추가] 안 읽은 메시지(False)는 검은색, 읽은 메시지(True)는 회색으로 설정
+                if is_read:
+                    item.setForeground(QColor(128, 128, 128))  # 회색 (RGB: 128, 128, 128)
+                else:
+                    item.setForeground(QColor(0, 0, 0))        # 검은색
+    
     def prev_page(self):
         if self.current_page > 0:
             self.current_page -= 1
