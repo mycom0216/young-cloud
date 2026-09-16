@@ -20,18 +20,20 @@ class NetworkClient:
 
     def send_request(self, action, data=None):
         """서버로 작업 요청(Action)과 데이터를 전송하고 응답을 받아오는 함수"""
-        if not self.sock:
-            if not self.connect():
-                return {"status": "fail", "message": "서버와 연결할 수 없습니다."}
-
-        payload = {
-            "action": action,
-            "data": data or {}
-        }
-
+        # 💡 매번 새로 연결하여 통신 충돌 방지
         try:
-            self.sock.sendall(json.dumps(payload).encode('utf-8'))
-            response_data = self.sock.recv(4096)
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.connect((self.host, self.port))
+            
+            payload = {
+                "action": action,
+                "data": data or {}
+            }
+            
+            sock.sendall(json.dumps(payload).encode('utf-8'))
+            response_data = sock.recv(4096)
+            sock.close()
+            
             return json.loads(response_data.decode('utf-8'))
         except Exception as e:
             print(f"[네트워크 에러] 데이터 송수신 중 오류 발생: {e}")

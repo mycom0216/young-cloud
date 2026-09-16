@@ -53,29 +53,29 @@ class ClientHandler(threading.Thread):
                 # 로그인 요청 처리
                 # ===========================================
                 if action == "login":
-                    user_id = data.get("user_id")
+                    email = data.get("email") or data.get("user_id")
                     password = data.get("password")
-                    # 입력받은 평문 비밀번호를 SHA-256 해시 문자열로 변환
-                    hashed_pw = hashlib.sha256(password.encode("utf-8")).hexdigest()
-                    
-                    cursor.execute(
-                        "SELECT * FROM USER WHERE EMAIL = %s AND LOWER(PASSWORD_HASH) = LOWER(%s)",
-                        (user_id, hashed_pw),
-                    )
-                    user = cursor.fetchone()
-                    
-                    if user:
-                        response = {
-                            "status": "success", 
-                            "message": "로그인 성공", 
-                            "email": user.get('EMAIL'),
-                            "service_id":user.get('SERVICE_ID'),
-                            "is_admin": bool(user.get('IS_ADMIN', 0)),
-                            "is_banned": bool(user.get('IS_BANNED', 0)),
-                            "name": user.get('NAME', '사용자')
-                        }
+                    if not email or not password:
+                        response = {"status": "fail", "message": "이메일과 비밀번호를 입력해주세요."}
                     else:
-                        response = {"status": "fail", "message": "아이디 또는 비밀번호가 틀렸습니다."}
+                        # DB 트리거가 INSERT/UPDATE 시 SHA2(password, 256)을 수행하므로
+                        # 로그인 조회 시에도 SHA2() 함수를 이용해 비교합니다.
+                        sql = "SELECT * FROM USER WHERE EMAIL = %s AND PASSWORD_HASH = SHA2(%s, 256)"
+                        cursor.execute(sql, (email, password))
+                        user = cursor.fetchone()
+                        # 3. 조회 결과(user) 존재 여부 검증
+                        if user:
+                            response = {
+                                "status": "success", 
+                                "message": "로그인 성공", 
+                                "email": user.get('EMAIL'),
+                                "service_id": user.get('SERVICE_ID'),
+                                "is_admin": bool(user.get('IS_ADMIN', 0)),
+                                "is_banned": bool(user.get('IS_BANNED', 0)),
+                                "name": user.get('NAME', '사용자')
+                            }
+                        else:
+                            response = {"status": "fail", "message": "아이디 또는 비밀번호가 틀렸습니다."}
                 # ===========================================
                 # 이메일 인증코드 발송 요청 처리 (서버 내부에서 직접 yagmail 처리)
                 # ===========================================
@@ -127,16 +127,14 @@ class ClientHandler(threading.Thread):
                     if existing_user:
                         response = {"status": "fail", "message": "이미 가입된 이메일 계정입니다."}
                     else:
+                        hashed_pw = hashlib.sha256(password.encode("utf-8")).hexdigest()
                         # 등급 이름에 따른 SERVICE_ID 조회 (없으면 기본값 1)
                         cursor.execute("SELECT `SERVICE_ID` FROM SERVICE WHERE `GRADE_NAME` = %s", (grade_name,))
                         service_row = cursor.fetchone()
                         service_id = service_row['SERVICE_ID'] if service_row else 1
                         
-                        sql = """
-                            INSERT INTO USER (EMAIL, PASSWORD_HASH, NAME, COMP, `SERVICE_ID`) 
-                            VALUES (%s, %s, %s, %s, %s)
-                        """
-                        cursor.execute(sql, (email, password, name, company, service_id))
+                        sql = "INSERT INTO USER (EMAIL, PASSWORD_HASH, NAME, COMP, `SERVICE_ID`) VALUES (%s, %s, %s, %s, %s)"
+                        cursor.execute(sql, (email, password, name, company, service_id)) # 평문 전달 -> 트리거가 해싱
                         conn.commit()
                         
                         response = {"status": "success", "message": "회원가입이 완료되었습니다!"}
@@ -319,14 +317,14 @@ class ClientHandler(threading.Thread):
                 # ==========================================
                 elif action == "update_user_password":
                     email = data.get("email")
-                    password = data.get("password")
+                    password = data.get("password") or data.get("new_password")
                     if not email or not password:
                         response = {"status": "fail", "message": "비밀번호 정보가 올바르지 않습니다."}
                     else:
-                        hashed_pw = hashlib.sha256(password.encode("utf-8")).hexdigest()
-                        cursor.execute("UPDATE USER SET PASSWORD_HASH = %s WHERE EMAIL = %s", (hashed_pw, email))
+                    # hashlib 해싱을 제거하고 평문 전달 -> UPDATE 트리거가 해싱 처리
+                        cursor.execute("UPDATE USER SET PASSWORD_HASH = %s WHERE EMAIL = %s", (password, email))
                         conn.commit()
-                        response = {"status": "success", "message": "비밀번호가 성공적으로 변경되었습니다."}                                     
+                        response = {"status": "success", "message": "비밀번호가 성공적으로 변경되었습니다."}                             
                 
                 
                 
