@@ -68,6 +68,7 @@ class ClientHandler(threading.Thread):
                             "status": "success", 
                             "message": "로그인 성공", 
                             "is_admin": bool(user.get('IS_ADMIN', 0)),
+                            "is_banned": bool(user.get('IS_BANNED', 0)),
                             "name": user.get('NAME', '사용자')
                         }
                     else:
