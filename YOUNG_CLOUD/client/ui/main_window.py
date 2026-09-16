@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from dialog.home_widget import HomeWidget
-
+from ui.cloud_window import CloudWindow
 
 # 💡 아직 개발되지 않은 메뉴들을 위한 임시 안내 화면 클래스
 class PlaceholderView(QWidget):
@@ -36,12 +36,29 @@ class PlaceholderView(QWidget):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, user_info = None):
+    def __init__(self, user_info = None, net_client = None):
         super().__init__()
         self.setWindowTitle("Young Cloud Desktop App")
         self.resize(1100, 750)
         self.user_info = user_info or {}
         self.user_name = self.user_info.get("name", "사용자")
+        self.net_client = net_client  # NetworkClient 객체 저장
+        # 메인 중앙 위젯 및 수평 레이아웃 생성
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        main_layout = QHBoxLayout(central_widget)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+        #좌측 초록색 사이드바 메뉴 (기존 사이드바 위젯이 있다면 여기에 배치)
+        # main_layout.addWidget(self.left_sidebar_widget)
+        # 우측 클라우드 화면 배치
+        self.cloud_page = CloudWindow(net_client=self.net_client)
+        main_layout.addWidget(self.cloud_page)
+        
+        
+        
+        
+        
         
         # 관리자 여부 확인 (서버 응답 키값에 따라 소문자/대문자 모두 대응)
         self.is_admin = bool(
