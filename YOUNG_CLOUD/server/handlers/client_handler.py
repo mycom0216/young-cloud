@@ -50,7 +50,7 @@ class ClientHandler(threading.Thread):
                 
                 response = {"status": "fail", "message": "알 수 없는 요청입니다."}
                 # ===========================================
-                # 1. 로그인 요청 처리
+                # 로그인 요청 처리
                 # ===========================================
                 if action == "login":
                     user_id = data.get("user_id")
@@ -77,7 +77,7 @@ class ClientHandler(threading.Thread):
                     else:
                         response = {"status": "fail", "message": "아이디 또는 비밀번호가 틀렸습니다."}
                 # ===========================================
-                # 2. 이메일 인증코드 발송 요청 처리 (서버 내부에서 직접 yagmail 처리)
+                # 이메일 인증코드 발송 요청 처리 (서버 내부에서 직접 yagmail 처리)
                 # ===========================================
                 elif action == "send_email":
                     email = data.get("email")
@@ -111,7 +111,7 @@ class ClientHandler(threading.Thread):
                         print(f"[이메일 전송 실패] {mail_err}")
                         response = {"status": "fail", "message": "이메일 전송에 실패했습니다. 이메일 주소를 확인해주세요."}
                 # ===========================================
-                # 3. 회원가입 정보 등록 요청 처리 (데이터 정의서 스키마 반영)
+                # 회원가입 정보 등록 요청 처리 (데이터 정의서 스키마 반영)
                 # ===========================================
                 elif action == "signup":
                     email = data.get("email")
@@ -141,7 +141,7 @@ class ClientHandler(threading.Thread):
                         
                         response = {"status": "success", "message": "회원가입이 완료되었습니다!"}
                 # ===========================================
-                # 4. 받은 메시지 목록 조회 요청 처리
+                # 받은 메시지 목록 조회 요청 처리
                 # ==========================================
                 elif action == "message_received":
                     email = data.get("email")
@@ -172,7 +172,7 @@ class ClientHandler(threading.Thread):
                     response = {"status": "success", "messages": messages}
                     
                 # ==========================================
-                # 7. 메시지 읽음 상태 변경 요청 처리
+                # 메시지 읽음 상태 변경 요청 처리
                 # ==========================================
                 elif action == "mark_message_read":
                     message_id = data.get("message_id")
@@ -185,7 +185,7 @@ class ClientHandler(threading.Thread):
                         response = {"status": "success", "message": "메시지가 읽음 처리되었습니다."}    
 
                 # ==========================================
-                # 5. 메시지 전송(답장 포함) 요청 처리
+                # 메시지 전송(답장 포함) 요청 처리
                 # ==========================================
                 elif action == "message_send":
                     sender_email = data.get("sender")
@@ -210,7 +210,7 @@ class ClientHandler(threading.Thread):
                         response = {"status": "success", "message": "메시지가 성공적으로 저장 및 전송되었습니다."}
 
                 # ==========================================
-                # 6. 메시지 삭제 요청 처리
+                #  메시지 삭제 요청 처리
                 # ==========================================
                 elif action == "message_delete":
                     message_ids = data.get("message_ids", [])
@@ -223,7 +223,7 @@ class ClientHandler(threading.Thread):
                         cursor.execute(sql, tuple(message_ids))
                         conn.commit()
                         response = {"status": "success", "message": "선택한 메시지가 삭제되었습니다."}
-                
+
                 # ==========================================
                 # 보낸 메시지 목록 조회 요청 처리
                 # ==========================================
@@ -250,7 +250,56 @@ class ClientHandler(threading.Thread):
                             msg['CREATED_AT'] = str(msg['CREATED_AT'])
                             
                     response = {"status": "success", "messages": messages}
-                
+
+                # ==========================================
+                #  서비스 등급 조회 요청 처리 (NEW)
+                # ==========================================
+                elif action == "get_user_service":
+                    email = data.get("email")
+                    sql = """
+                        SELECT u.EMAIL, u.SERVICE_ID, s.GRADE_NAME, s.MAX_STORAGE
+                        FROM USER u
+                        JOIN SERVICE s ON u.SERVICE_ID = s.SERVICE_ID
+                        WHERE u.EMAIL = %s
+                    """
+                    cursor.execute(sql, (email,))
+                    user_service = cursor.fetchone()
+                    
+                    if user_service:
+                        response = {
+                            "status": "success",
+                            "service_id": user_service['SERVICE_ID'],
+                            "grade_name": user_service['GRADE_NAME'],
+                            "max_storage": user_service['MAX_STORAGE']
+                        }
+                    else:
+                        response = {"status": "fail", "message": "사용자 등급 정보를 가져오지 못했습니다."}
+
+                # ==========================================
+                # 서비스 등급 변경 요청 처리 (NEW)
+                # ==========================================
+                elif action == "settings_tier_update":
+                    email = data.get("email")
+                    grade_name = data.get("grade_name")
+                    service_id = data.get("service_id")
+
+                    # 등급 이름만 넘어왔을 경우 SERVICE 테이블에서 SERVICE_ID 조회
+                    if not service_id and grade_name:
+                        cursor.execute("SELECT SERVICE_ID FROM SERVICE WHERE GRADE_NAME = %s", (grade_name,))
+                        s_row = cursor.fetchone()
+                        if s_row:
+                            service_id = s_row['SERVICE_ID']
+
+                    if not service_id:
+                        response = {"status": "fail", "message": "유효하지 않은 서비스 등급 정보입니다."}
+                    else:
+                        cursor.execute("UPDATE USER SET SERVICE_ID = %s WHERE EMAIL = %s", (service_id, email))
+                        conn.commit()
+                        response = {
+                            "status": "success", 
+                            "message": "서비스 등급 변경 성공",
+                            "service_id": service_id
+                        }                         
                 
                 
                 
