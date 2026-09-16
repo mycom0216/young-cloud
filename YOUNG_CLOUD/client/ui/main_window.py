@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
 from dialog.home_widget import HomeWidget
 from dialog.home_widget import CalenderWidget
 from settings_window import ServiceSettingWidget
-from message_window import MessageWidget, MessageDialog
+from message_window import MessageWidget, MessageDialog, SentMessageWidget
 
 
 # 💡 아직 개발되지 않은 메뉴들을 위한 임시 안내 화면 클래스
@@ -391,6 +391,9 @@ class MainWindow(QMainWindow):
                 self.content_pages[name] = ServiceSettingWidget(user_email=user_email)    
             elif name in ["받은메시지", "메시지함"]:  # 👈 메시지 위젯 연결
                 self.content_pages[name] = MessageWidget(self.user_info)
+            
+            elif name == "보낸메시지":
+                self.content_pages[name] = SentMessageWidget(self.user_info)    
             else:
                 self.content_pages[name] = PlaceholderView(name)
 

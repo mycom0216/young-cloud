@@ -170,6 +170,19 @@ class ClientHandler(threading.Thread):
                             msg['CREATED_AT'] = str(msg['CREATED_AT'])
                             
                     response = {"status": "success", "messages": messages}
+                    
+                # ==========================================
+                # 7. 메시지 읽음 상태 변경 요청 처리
+                # ==========================================
+                elif action == "mark_message_read":
+                    message_id = data.get("message_id")
+                    if not message_id:
+                        response = {"status": "fail", "message": "메시지 ID가 전달되지 않았습니다."}
+                    else:
+                        sql = "UPDATE MESSAGE SET IS_READ = 1 WHERE MESSAGE_ID = %s"
+                        cursor.execute(sql, (message_id,))
+                        conn.commit()
+                        response = {"status": "success", "message": "메시지가 읽음 처리되었습니다."}    
 
                 # ==========================================
                 # 5. 메시지 전송(답장 포함) 요청 처리
@@ -211,7 +224,32 @@ class ClientHandler(threading.Thread):
                         conn.commit()
                         response = {"status": "success", "message": "선택한 메시지가 삭제되었습니다."}
                 
-                
+                # ==========================================
+                # 보낸 메시지 목록 조회 요청 처리
+                # ==========================================
+                elif action == "message_sent":
+                    email = data.get("email")
+                    cursor.execute("SELECT USER_ID FROM USER WHERE EMAIL = %s", (email,))
+                    user_row = cursor.fetchone()
+                    if not user_row:
+                        return {"status": "fail", "message": "사용자 정보를 찾을 수 없습니다."}
+                    user_id = user_row['USER_ID']
+                    
+                    sql = """
+                        SELECT m.MESSAGE_ID, u.EMAIL as RECEIVER_EMAIL, m.CONTENT, m.CREATED_AT
+                        FROM MESSAGE m
+                        JOIN USER u ON m.RECEIVER_ID = u.USER_ID
+                        WHERE m.SENDER_ID = %s
+                        ORDER BY m.CREATED_AT DESC
+                    """
+                    cursor.execute(sql, (user_id,))
+                    messages = cursor.fetchall()
+                    
+                    for msg in messages:
+                        if msg.get('CREATED_AT'):
+                            msg['CREATED_AT'] = str(msg['CREATED_AT'])
+                            
+                    response = {"status": "success", "messages": messages}
                 
                 
                 
