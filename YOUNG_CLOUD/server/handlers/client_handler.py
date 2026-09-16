@@ -65,15 +65,27 @@ class ClientHandler(threading.Thread):
                     user = cursor.fetchone()
                     
                     if user:
-                        response = {
-                            "status": "success", 
-                            "message": "로그인 성공", 
-                            "email": user.get('EMAIL'),
-                            "service_id":user.get('SERVICE_ID'),
-                            "is_admin": bool(user.get('IS_ADMIN', 0)),
-                            "is_banned": bool(user.get('IS_BANNED', 0)),
-                            "name": user.get('NAME', '사용자')
-                        }
+                        # 💡 [추가된 검증 로직] 아이디/비밀번호가 맞더라도 차단(IS_BANNED)된 유저인지 확인합니다.
+                        # 데이터 정의서 기준 IS_BANNED는 BOOLEAN(0 또는 1)입니다.
+                        is_banned = bool(user.get('IS_BANNED', 0))
+                        
+                        if is_banned:
+                            # 차단된 유저라면 로그인을 거부하고 메시지를 반환합니다.
+                            response = {
+                                "status": "fail", 
+                                "message": "차단된 계정입니다. 관리자에게 문의하세요."
+                            }
+                        else:
+                            # 정상 유저인 경우에만 로그인 성공 처리
+                            response = {
+                                "status": "success", 
+                                "message": "로그인 성공", 
+                                "email": user.get('EMAIL'),
+                                "service_id": user.get('SERVICE_ID'),
+                                "is_admin": bool(user.get('IS_ADMIN', 0)),
+                                "is_banned": is_banned,
+                                "name": user.get('NAME', '사용자')
+                            }
                     else:
                         response = {"status": "fail", "message": "아이디 또는 비밀번호가 틀렸습니다."}
                 # ===========================================
@@ -127,6 +139,8 @@ class ClientHandler(threading.Thread):
                     if existing_user:
                         response = {"status": "fail", "message": "이미 가입된 이메일 계정입니다."}
                     else:
+                        # 💡 [핵심 수정] 로그인할 때와 똑같이 비밀번호를 SHA-256 해시로 암호화하여 저장합니다.
+                        hashed_pw = hashlib.sha256(password.encode("utf-8")).hexdigest()
                         # 등급 이름에 따른 SERVICE_ID 조회 (없으면 기본값 1)
                         cursor.execute("SELECT `SERVICE_ID` FROM SERVICE WHERE `GRADE_NAME` = %s", (grade_name,))
                         service_row = cursor.fetchone()
@@ -351,6 +365,66 @@ class ClientHandler(threading.Thread):
                         cursor.execute("UPDATE USER SET PASSWORD_HASH = %s WHERE EMAIL = %s", (hashed_pw, email))
                         conn.commit()
                         response = {"status": "success", "message": "비밀번호가 성공적으로 변경되었습니다."}                                     
+                
+                
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+                # ==========================================
+                # 💡 [관리자] 전체 이용자 목록 조회 요청 처리
+                # ==========================================
+                elif action == "admin_get_users":
+                    # USER 테이블과 SERVICE 테이블을 조인하여 이용자 이메일, 이름, 등급명, 차단상태(IS_BANNED)를 조회합니다.
+                    sql = """
+                        SELECT u.EMAIL, u.NAME, s.GRADE_NAME, u.IS_BANNED
+                        FROM USER u
+                        JOIN SERVICE s ON u.SERVICE_ID = s.SERVICE_ID
+                        ORDER BY u.CREATED_AT DESC
+                    """
+                    cursor.execute(sql)
+                    users = cursor.fetchall()
+                    
+                    response = {"status": "success", "users": users}
+
+                # ==========================================
+                # 💡 [관리자] 사용자 차단 상태 변경(정지/해제) 요청 처리
+                # ==========================================
+                elif action == "admin_update_ban":
+                    email = data.get("email")
+                    is_banned = data.get("is_banned") # True(차단) 또는 False(정상)
+                    
+                    if not email:
+                        response = {"status": "fail", "message": "사용자 이메일 정보가 전달되지 않았습니다."}
+                    else:
+                        # 데이터 정의서에 따라 IS_BANNED 컬럼 값을 1(True) 또는 0(False)으로 업데이트합니다[cite: 6].
+                        banned_val = 1 if is_banned else 0
+                        sql = "UPDATE USER SET IS_BANNED = %s WHERE EMAIL = %s"
+                        cursor.execute(sql, (banned_val, email))
+                        conn.commit()
+                        
+                        status_text = "차단" if is_banned else "차단 해제"
+                        response = {"status": "success", "message": f"해당 사용자가 성공적으로 {status_text}되었습니다."}
+            
+            
+            
                 
                 
                 
