@@ -55,6 +55,11 @@ class NetworkClient:
 # ==========================================
     # 💡 메시지 관련 통신 함수들
     # ==========================================
+    def get_sent_messages(self, email):
+        """서버로 내가 보낸 메시지 목록 조회를 요청합니다."""
+        return self.send_request("message_sent", {"email": email})
+    
+    
     def get_received_messages(self, email):
         """서버로 내가 받은 메시지 목록 조회를 요청합니다."""
         return self.send_request("message_received", {"email": email})
@@ -66,7 +71,11 @@ class NetworkClient:
             "receiver": receiver_email,
             "content": content
         })
-    
+        
+    def mark_message_read(self, message_id):
+        """특정 메시지를 읽음 상태로 변경 요청"""
+        data = {"message_id": message_id}
+        return self.send_request("mark_message_read", data)
     
     def delete_messages(self, message_ids):
         """서버로 선택한 메시지들의 삭제를 요청합니다."""
