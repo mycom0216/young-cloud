@@ -192,22 +192,46 @@ class ClientHandler(threading.Thread):
                     receiver_email = data.get("receiver")
                     content = data.get("content")
                     print(f"[DEBUG] 받는 사람: {receiver_email} / 보내는 사람: {sender_email}")
-                    cursor.execute("SELECT USER_ID FROM USER WHERE EMAIL = %s", (sender_email,))
-                    sender_row = cursor.fetchone()
-                    cursor.execute("SELECT USER_ID FROM USER WHERE EMAIL = %s", (receiver_email,))
-                    receiver_row = cursor.fetchone()
                     
-                    if not sender_row or not receiver_row:
-                        response = {"status": "fail", "message": "수신자 또는 송신자 정보를 찾을 수 없습니다."}
+                    # 송신자 정보 및 관리자 여부 조회
+                    cursor.execute("SELECT USER_ID, IS_ADMIN FROM USER WHERE EMAIL = %s", (sender_email,))
+                    sender_row = cursor.fetchone()
+                    
+                    if not sender_row:
+                        response = {"status": "fail", "message": "송신자 정보를 찾을 수 없습니다."}
                     else:
-                        # MESSAGE 테이블에 INSERT 실행
-                        sql = """
-                            INSERT INTO MESSAGE (SENDER_ID, RECEIVER_ID, CONTENT, IS_READ)
-                            VALUES (%s, %s, %s, FALSE)
-                        """
-                        cursor.execute(sql, (sender_row['USER_ID'], receiver_row['USER_ID'], content))
-                        conn.commit()
-                        response = {"status": "success", "message": "메시지가 성공적으로 저장 및 전송되었습니다."}
+                        sender_id = sender_row['USER_ID']
+                        is_admin = bool(sender_row['IS_ADMIN'])
+                        
+                        # 관리자이고 전체 전송을 요청한 경우 (수신자가 "ALL" 또는 "전체 이용자")
+                        if is_admin and receiver_email in ("ALL", "전체 이용자"):
+                            cursor.execute("SELECT USER_ID FROM USER")
+                            all_users = cursor.fetchall()
+                            
+                            sql = """
+                                INSERT INTO MESSAGE (SENDER_ID, RECEIVER_ID, CONTENT, IS_READ)
+                                VALUES (%s, %s, %s, FALSE)
+                            """
+                            for user in all_users:
+                                cursor.execute(sql, (sender_id, user['USER_ID'], content))
+                            conn.commit()
+                            response = {"status": "success", "message": "전체 이용자에게 메시지가 성공적으로 전송되었습니다."}
+                            
+                        else:
+                            # 일반 사용자 또는 개별 전송
+                            cursor.execute("SELECT USER_ID FROM USER WHERE EMAIL = %s", (receiver_email,))
+                            receiver_row = cursor.fetchone()
+                            
+                            if not receiver_row:
+                                response = {"status": "fail", "message": "수신자 정보를 찾을 수 없습니다."}
+                            else:
+                                sql = """
+                                    INSERT INTO MESSAGE (SENDER_ID, RECEIVER_ID, CONTENT, IS_READ)
+                                    VALUES (%s, %s, %s, FALSE)
+                                """
+                                cursor.execute(sql, (sender_id, receiver_row['USER_ID'], content))
+                                conn.commit()
+                                response = {"status": "success", "message": "메시지가 성공적으로 저장 및 전송되었습니다."}
 
                 # ==========================================
                 #  메시지 삭제 요청 처리
