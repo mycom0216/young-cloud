@@ -1,5 +1,6 @@
 import os
 import sys
+from ui.logic import CloudLogic
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import (
@@ -21,13 +22,20 @@ from PySide6.QtWidgets import (
 
 from dialog.home_widget import HomeWidget
 from ui.cloud_window import CloudWindow
+from ui.message_widget import MessageWidget
+from network_client import NetworkClient
+from ui.feature_widgets import (
+    CalendarWidget, ComposeMessageWidget, ProfileSettingsWidget,
+    MessageSettingsWidget, BlacklistWidget, CloudSettingsWidget, AdminBanWidget
+)
+from ui.settings_window import ServiceSettingWidget, SettingsClient
 
 # 💡 아직 개발되지 않은 메뉴들을 위한 임시 안내 화면 클래스
 class PlaceholderView(QWidget):
     def __init__(self, menu_name):
         super().__init__()
         layout = QVBoxLayout(self)
-        label = QLabel(f"'{menu_name}' 화면은 팀원이 개발 중입니다. 🚧")
+        label = QLabel(f"'{menu_name}'  🚧")
         label.setStyleSheet("font-size: 15px; color: #555; font-weight: bold;")
         label.setAlignment(Qt.AlignCenter)
         layout.addWidget(label)
@@ -42,18 +50,10 @@ class MainWindow(QMainWindow):
         self.resize(1100, 750)
         self.user_info = user_info or {}
         self.user_name = self.user_info.get("name", "사용자")
-        self.net_client = net_client  # NetworkClient 객체 저장
-        # 메인 중앙 위젯 및 수평 레이아웃 생성
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        main_layout = QHBoxLayout(central_widget)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
-        #좌측 초록색 사이드바 메뉴 (기존 사이드바 위젯이 있다면 여기에 배치)
-        # main_layout.addWidget(self.left_sidebar_widget)
-        # 우측 클라우드 화면 배치
-        self.cloud_page = CloudWindow(net_client=self.net_client)
-        main_layout.addWidget(self.cloud_page)
+        self.net_client = net_client or NetworkClient()  # 메시지 화면에서도 같은 연결을 사용
+        # 로그인 응답으로 받은 세션 토큰을 새 공용 클라이언트에 전달합니다.
+        self.net_client.session_token = self.user_info.get("session_token")
+
         
         
         
@@ -390,6 +390,44 @@ class MainWindow(QMainWindow):
         for name in all_menu_names:
             if name == "홈 메인":
                 self.content_pages[name] = HomeWidget(self.user_info)
+            elif name == "내 파일":
+                self.content_pages[name] = CloudLogic(
+                    self.net_client, "my_files", self.user_info.get("email", "")
+                )
+            elif name == "공유 문서":
+                self.content_pages[name] = CloudLogic(
+                    self.net_client, "shared", self.user_info.get("email", "")
+                )
+            elif name == "휴지통":
+                self.content_pages[name] = CloudLogic(
+                    self.net_client, "trash", self.user_info.get("email", "")
+                )
+            elif name in ("메시지함", "받은메시지", "보낸메시지", "메시지 보내기"):
+                if name == "메시지 보내기":
+                    self.content_pages[name] = ComposeMessageWidget(self.user_info, self.net_client)
+                elif name == "보낸메시지":
+                    self.content_pages[name] = MessageWidget(self.user_info, self.net_client, message_action="message_sent")
+                else:
+                    self.content_pages[name] = MessageWidget(self.user_info, self.net_client)
+            elif name == "달력보기":
+                self.content_pages[name] = CalendarWidget(self.user_info, self.net_client)
+            elif name == "서비스 확인 및 변경":
+                self.content_pages[name] = ServiceSettingWidget(
+                    user_email=self.user_info.get("email", ""),
+                    settings_client=SettingsClient(self.net_client)
+                )
+            elif name == "개인정보변경":
+                self.content_pages[name] = ProfileSettingsWidget(self.user_info, self.net_client)
+            elif name == "기본메시지 설정":
+                self.content_pages[name] = MessageSettingsWidget(self.user_info, self.net_client, "default")
+            elif name == "마무리메시지 설정":
+                self.content_pages[name] = MessageSettingsWidget(self.user_info, self.net_client, "finish")
+            elif name == "블랙리스트 설정":
+                self.content_pages[name] = BlacklistWidget(self.user_info, self.net_client)
+            elif name == "클라우드 설정":
+                self.content_pages[name] = CloudSettingsWidget(self.user_info, self.net_client)
+            elif name == "서비스제한":
+                self.content_pages[name] = AdminBanWidget(self.user_info, self.net_client)
             else:
                 self.content_pages[name] = PlaceholderView(name)
 

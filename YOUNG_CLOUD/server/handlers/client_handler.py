@@ -4,7 +4,18 @@ import json
 import pymysql
 import random
 import yagmail
+
+# 로그인 성공 후 발급하는 임시 세션입니다.
+# 서버 프로세스가 재시작되면 세션은 모두 만료됩니다.
+ACTIVE_SESSIONS = {}
+SESSION_LOCK = threading.Lock()
+SESSION_TTL_SECONDS = 60 * 60 * 8
 import hashlib
+import uuid
+import os
+import base64
+import time
+import secrets
 
 class ClientHandler(threading.Thread):
     def __init__(self, client_sock, client_addr, db_lock):
@@ -33,6 +44,21 @@ class ClientHandler(threading.Thread):
         data = request.get("data", {})
 
         print(f"[요청 수신] 작업 종류(Action): {action}")
+
+        # 로그인/회원가입/이메일 인증 외의 요청은 세션 토큰이 필요합니다.
+        # 토큰에 저장된 사용자 정보로 data의 email을 덮어써서
+        # 다른 사용자의 파일이나 메시지에 접근하지 못하게 합니다.
+        if action not in ("login", "signup", "send_email"):
+            token = data.pop("_session_token", None)
+            with SESSION_LOCK:
+                session = ACTIVE_SESSIONS.get(token)
+                if not session or session["expires_at"] < time.time():
+                    if token:
+                        ACTIVE_SESSIONS.pop(token, None)
+                    return {"status": "fail", "message": "로그인이 만료되었습니다. 다시 로그인해주세요."}
+            data["email"] = session["email"]
+            data["user_id"] = session["user_id"]
+            data["is_admin"] = session["is_admin"]
 
         with self.db_lock:
             try:
@@ -64,9 +90,19 @@ class ClientHandler(threading.Thread):
                     user = cursor.fetchone()
                     
                     if user:
+                        token = secrets.token_urlsafe(32)
+                        with SESSION_LOCK:
+                            ACTIVE_SESSIONS[token] = {
+                                "user_id": user.get("USER_ID"),
+                                "email": user.get("EMAIL", user_id),
+                                "is_admin": bool(user.get("IS_ADMIN", 0)),
+                                "expires_at": time.time() + SESSION_TTL_SECONDS,
+                            }
                         response = {
                             "status": "success", 
                             "message": "로그인 성공", 
+                            "session_token": token,
+                            "email": user.get("EMAIL", user_id),
                             "is_admin": bool(user.get('IS_ADMIN', 0)),
                             "name": user.get('NAME', '사용자')
                         }
@@ -135,6 +171,225 @@ class ClientHandler(threading.Thread):
                         
                         response = {"status": "success", "message": "회원가입이 완료되었습니다!"}
                 
+
+                # ---------------------------------------------------------
+                # 메시지 기능 처리
+                # MESSAGE 테이블 기준:
+                # MESSAGE_ID, SENDER_ID, RECEIVER_ID, TITLE, CONTENT,
+                # IS_READ, RECEIVED_AT, IS_DELETED
+                # ---------------------------------------------------------
+                elif action == "message_received":
+                    email = data.get("email")
+                    cursor.execute(
+                        "SELECT M.MESSAGE_ID AS id, SU.EMAIL AS sender, "
+                        "SU.NAME AS sender_name, '' AS title, "
+                        "M.CONTENT AS content, M.IS_READ AS is_read, "
+                        "M.CREATED_AT AS received_at "
+                        "FROM MESSAGE M "
+                        "JOIN USER RU ON M.RECEIVER_ID = RU.USER_ID "
+                        "JOIN USER SU ON M.SENDER_ID = SU.USER_ID "
+                        "WHERE RU.EMAIL = %s "
+                        "ORDER BY M.CREATED_AT DESC",
+                        (email,)
+                    )
+                    response = {"status": "success", "messages": cursor.fetchall()}
+
+                elif action == "message_sent":
+                    cursor.execute(
+                        "SELECT M.MESSAGE_ID AS id, RU.EMAIL AS sender, "
+                        "RU.NAME AS sender_name, '' AS title, "
+                        "M.CONTENT AS content, M.IS_READ AS is_read, "
+                        "M.CREATED_AT AS received_at "
+                        "FROM MESSAGE M "
+                        "JOIN USER SU ON M.SENDER_ID = SU.USER_ID "
+                        "JOIN USER RU ON M.RECEIVER_ID = RU.USER_ID "
+                        "WHERE SU.EMAIL = %s "
+                        "ORDER BY M.CREATED_AT DESC",
+                        (data.get("email"),)
+                    )
+                    response = {"status": "success", "messages": cursor.fetchall()}
+
+                elif action == "message_send":
+                    sender = data.get("sender")
+                    receiver = data.get("receiver")
+                    title = data.get("title", "")
+                    content = data.get("content", "")
+                    if not sender or not receiver or not content:
+                        response = {"status": "fail", "message": "보내는 사람, 받는 사람, 내용을 확인해주세요."}
+                    else:
+                        cursor.execute("SELECT USER_ID FROM USER WHERE EMAIL = %s", (sender,))
+                        sender_row = cursor.fetchone()
+                        cursor.execute("SELECT USER_ID FROM USER WHERE EMAIL = %s", (receiver,))
+                        receiver_row = cursor.fetchone()
+                        if not sender_row or not receiver_row:
+                            response = {"status": "fail", "message": "받는 사람 아이디를 찾을 수 없습니다."}
+                        else:
+                            cursor.execute(
+                                "INSERT INTO MESSAGE "
+                                "(SENDER_ID, RECEIVER_ID, CONTENT, IS_READ) "
+                                "VALUES (%s, %s, %s, 0)",
+                                (sender_row["USER_ID"], receiver_row["USER_ID"], content)
+                            )
+                            conn.commit()
+                            response = {"status": "success", "message": "메시지가 전송되었습니다."}
+
+                elif action == "message_mark_read":
+                    cursor.execute(
+                        "UPDATE MESSAGE M JOIN USER U ON M.RECEIVER_ID = U.USER_ID "
+                        "SET M.IS_READ = 1 "
+                        "WHERE M.MESSAGE_ID = %s AND U.EMAIL = %s",
+                        (data.get("message_id"), data.get("email"))
+                    )
+                    conn.commit()
+                    response = {"status": "success", "message": "읽음 처리되었습니다."}
+
+                elif action == "message_delete":
+                    ids = data.get("message_ids", [])
+                    if not ids:
+                        response = {"status": "fail", "message": "삭제할 메시지가 없습니다."}
+                    else:
+                        placeholders = ",".join(["%s"] * len(ids))
+                        cursor.execute(
+                            f"DELETE M FROM MESSAGE M "
+                            f"JOIN USER U ON M.RECEIVER_ID = U.USER_ID "
+                            f"WHERE M.MESSAGE_ID IN ({placeholders}) AND U.EMAIL = %s",
+                            list(ids) + [data.get("email")]
+                        )
+                        conn.commit()
+                        response = {"status": "success", "message": "메시지가 삭제되었습니다."}
+
+
+                elif action == "cloud_list":
+                    cursor.execute(
+                        "SELECT F.FILE_ID AS id, F.ORIGINAL_NAME AS name, "
+                        "F.FILE_SIZE AS size, F.UPLOADED_AT AS date, "
+                        "F.STATUS AS status, F.FOLDER_ID AS folder_id "
+                        "FROM FILE F JOIN FOLDER D ON F.FOLDER_ID=D.FOLDER_ID "
+                        "JOIN USER U ON D.USER_ID=U.USER_ID "
+                        "WHERE U.EMAIL=%s AND F.STATUS='COMPLETE' "
+                        "ORDER BY F.UPLOADED_AT DESC",
+                        (data.get("email"),)
+                    )
+                    response = {"status": "success", "files": cursor.fetchall()}
+
+                elif action == "cloud_trash":
+                    cursor.execute(
+                        "SELECT F.FILE_ID AS id, F.ORIGINAL_NAME AS name, "
+                        "F.FILE_SIZE AS size, F.UPLOADED_AT AS date, F.STATUS AS status "
+                        "FROM FILE F JOIN FOLDER D ON F.FOLDER_ID=D.FOLDER_ID "
+                        "JOIN USER U ON D.USER_ID=U.USER_ID "
+                        "WHERE U.EMAIL=%s AND F.STATUS='TRASH' "
+                        "ORDER BY F.UPLOADED_AT DESC",
+                        (data.get("email"),)
+                    )
+                    response = {"status": "success", "files": cursor.fetchall()}
+
+                elif action == "cloud_shared":
+                    cursor.execute(
+                        "SELECT F.FILE_ID AS id, F.ORIGINAL_NAME AS name, "
+                        "F.FILE_SIZE AS size, F.UPLOADED_AT AS date, F.STATUS AS status "
+                        "FROM FILE F JOIN FOLDER D ON F.FOLDER_ID=D.FOLDER_ID "
+                        "JOIN USER U ON D.COMP=U.COMP "
+                        "WHERE U.EMAIL=%s AND D.FOLDER_TYPE='COMP' "
+                        "AND F.STATUS='COMPLETE' ORDER BY F.UPLOADED_AT DESC",
+                        (data.get("email"),)
+                    )
+                    response = {"status": "success", "files": cursor.fetchall()}
+
+                elif action == "cloud_upload":
+                    email = data.get("email")
+                    original_name = os.path.basename(data.get("file_name", ""))
+                    encoded = data.get("content_base64", "")
+                    if not original_name or not encoded:
+                        response = {"status": "fail", "message": "업로드할 파일이 없습니다."}
+                    else:
+                        cursor.execute(
+                            "SELECT USER_ID, FILE_SIZE_LIMIT FROM USER WHERE EMAIL=%s",
+                            (email,)
+                        )
+                        user = cursor.fetchone()
+                        binary = base64.b64decode(encoded)
+                        max_size = int(user.get("FILE_SIZE_LIMIT") or 50 * 1024 * 1024) if user else 0
+                        if not user:
+                            response = {"status": "fail", "message": "사용자를 찾을 수 없습니다."}
+                        elif len(binary) > max_size:
+                            response = {"status": "fail", "message": "파일 용량 제한을 초과했습니다."}
+                        else:
+                            cursor.execute(
+                                "SELECT FOLDER_ID FROM FOLDER "
+                                "WHERE USER_ID=%s AND FOLDER_TYPE='ROOT' LIMIT 1",
+                                (user["USER_ID"],)
+                            )
+                            folder = cursor.fetchone()
+                            if not folder:
+                                cursor.execute(
+                                    "INSERT INTO FOLDER (USER_ID,FOLDER_NAME,FOLDER_TYPE,RELATIVE_PATH) "
+                                    "VALUES (%s,'내 파일','ROOT',%s)",
+                                    (user["USER_ID"], str(user["USER_ID"]))
+                                )
+                                conn.commit()
+                                folder_id = cursor.lastrowid
+                            else:
+                                folder_id = folder["FOLDER_ID"]
+                            stored_name = str(uuid.uuid4()) + "_" + original_name
+                            relative_path = os.path.join(
+                                "storage", "users", str(user["USER_ID"]), stored_name
+                            )
+                            absolute_path = os.path.join(
+                                os.path.dirname(os.path.dirname(__file__)), relative_path
+                            )
+                            os.makedirs(os.path.dirname(absolute_path), exist_ok=True)
+                            with open(absolute_path, "wb") as file_obj:
+                                file_obj.write(binary)
+                            cursor.execute(
+                                "INSERT INTO FILE "
+                                "(FOLDER_ID,USER_ID,FILE_NAME,ORIGINAL_NAME,FILE_PATH,FILE_SIZE,STATUS) "
+                                "VALUES (%s,%s,%s,%s,%s,%s,'COMPLETE')",
+                                (folder_id, user["USER_ID"], stored_name, original_name,
+                                 relative_path, len(binary))
+                            )
+                            conn.commit()
+                            response = {"status": "success", "message": "파일을 업로드했습니다."}
+
+                elif action == "cloud_download":
+                    cursor.execute(
+                        "SELECT F.FILE_PATH, F.ORIGINAL_NAME FROM FILE F "
+                        "JOIN USER U ON F.USER_ID=U.USER_ID "
+                        "WHERE F.FILE_ID=%s AND U.EMAIL=%s AND F.STATUS='COMPLETE'",
+                        (data.get("file_id"), data.get("email"))
+                    )
+                    file_row = cursor.fetchone()
+                    if not file_row:
+                        response = {"status": "fail", "message": "파일을 찾을 수 없습니다."}
+                    else:
+                        absolute_path = os.path.join(
+                            os.path.dirname(os.path.dirname(__file__)),
+                            file_row["FILE_PATH"]
+                        )
+                        with open(absolute_path, "rb") as file_obj:
+                            encoded = base64.b64encode(file_obj.read()).decode("ascii")
+                        response = {"status": "success",
+                                    "file_name": file_row["ORIGINAL_NAME"],
+                                    "content_base64": encoded}
+
+                elif action == "cloud_delete":
+                    cursor.execute(
+                        "UPDATE FILE F JOIN USER U ON F.USER_ID=U.USER_ID "
+                        "SET F.STATUS='TRASH' WHERE F.FILE_ID=%s AND U.EMAIL=%s",
+                        (data.get("file_id"), data.get("email"))
+                    )
+                    conn.commit()
+                    response = {"status": "success", "message": "휴지통으로 이동했습니다."}
+
+                elif action == "cloud_restore":
+                    cursor.execute(
+                        "UPDATE FILE F JOIN USER U ON F.USER_ID=U.USER_ID "
+                        "SET F.STATUS='COMPLETE' WHERE F.FILE_ID=%s AND U.EMAIL=%s",
+                        (data.get("file_id"), data.get("email"))
+                    )
+                    conn.commit()
+                    response = {"status": "success", "message": "파일을 복원했습니다."}
+
             except Exception as e:
                 response = {"status": "error", "message": f"데이터베이스 오류: {str(e)}"}
             finally:

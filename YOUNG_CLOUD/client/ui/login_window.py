@@ -11,7 +11,6 @@ sys.path.append(os.path.join(parent_dir, "utils"))
 
 from dialog.company_dialog import CompanySearchDialog  # 분리된 회사 검색 다이얼로그 임포트
 from dialog.sign_up_ui import Ui_Form  # 회원가입 UI 클래스 임포트
-from main_window import MainWindow
 from network_client import NetworkClient, send_login_request
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont, QPixmap
@@ -318,6 +317,7 @@ class LoginWindow(QWidget):
 
     def open_main_window(self, user_info):
         print("[GUI] 메인 화면으로 전환을 수행합니다.")
+        from main_window import MainWindow
         self.main_window = MainWindow(user_info)
         self.main_window.show()
         self.close()
