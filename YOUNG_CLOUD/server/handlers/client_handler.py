@@ -533,6 +533,56 @@ class ClientHandler(threading.Thread):
                         conn.commit()
                         response = {"status": "success", "message": "영구 삭제가 완료되었습니다."}
                 # ===========================================
+                # 6-8. [클라우드 용량 계산] 서버 실제 용량 + DB 반영
+                # ===========================================
+                elif action == "cloud_storage_info":
+                    email = data.get("email")
+                    print(f"[cloud_storage_info 실행] email: {email}")
+                    
+                    # 1. 사용자 정보 및 COMP 조회
+                    cursor.execute("SELECT USER_ID, COMP, EMAIL FROM USER WHERE EMAIL = %s", (email,))
+                    user = cursor.fetchone()
+                    
+                    if not user:
+                        response = {"status": "fail", "message": "사용자 정보를 찾을 수 없습니다."}
+                    else:
+                        user_id = user['USER_ID']
+                        comp = user['COMP'] or "DEFAULT_COMP"
+                        user_email = user['EMAIL']
+                        
+                        # 2. 클라우드 디스크 실제 사용량 계산 (Bytes)
+                        user_storage_dir = os.path.join(CLOUD_STORAGE_DIR, comp, user_email)
+                        total_size_bytes = 0
+                        if os.path.exists(user_storage_dir):
+                            for root, dirs, files in os.walk(user_storage_dir):
+                                for f in files:
+                                    fp = os.path.join(root, f)
+                                    if os.path.exists(fp):
+                                        total_size_bytes += os.path.getsize(fp)
+                                            
+                        # 3. SERVICE 테이블과 JOIN하여 등급명 및 최대 용량 조회
+                    cursor.execute("""
+                        SELECT s.GRADE_NAME, s.MAX_STORAGE 
+                        FROM USER u 
+                        LEFT JOIN SERVICE s ON u.SERVICE_ID = s.SERVICE_ID 
+                        WHERE u.USER_ID = %s
+                    """, (user_id,))
+                    service_row = cursor.fetchone()
+                     
+                    if service_row and service_row.get('GRADE_NAME'):
+                        grade_name = service_row['GRADE_NAME']
+                        max_storage_bytes = service_row['MAX_STORAGE']
+                    else:
+                        grade_name = "일반"
+                        max_storage_bytes = 104857600
+                        
+                    response = {
+                        "status": "success",
+                        "grade_name": grade_name,
+                        "max_storage": max_storage_bytes,
+                        "total_used": total_size_bytes
+                    }
+                # ===========================================
                 # 7. [관리자] 사용자 정지/해제 관리
                 # ===========================================
                 elif action == "admin_get_users":

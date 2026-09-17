@@ -452,7 +452,7 @@ class ServiceSettingWidget(QWidget):
         if reply == QMessageBox.Yes:
             res = self.settings_client.update_tier(self.user_email, self.selected_tier)
             if isinstance(res, dict) and res.get("status") == "success":
-                QMessageBox.information(self, "성공", f"서비스 등급이 '{self.selected_tier}'(으)로 변경되었습니다.")
+                QMessageBox.information(self, "성공", f"서비스 등급이 '{self.selected_tier}'(으)로 변경되었습니다.\n적용을 위해 재로그인 해주세요.")
                 self.current_tier = self.selected_tier
                 self.current_tier_label.setText(f"현재 이용중인 등급 : {self.current_tier}")
                 self.update_card_styles()
