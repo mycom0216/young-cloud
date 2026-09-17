@@ -2,10 +2,10 @@
 import sys
 import os
 from PySide6.QtCore import Qt, QStringListModel, QSettings, QTimer
-from PySide6.QtGui import QFont, QIcon, QCursor, QColor
+from PySide6.QtGui import QFont, QIcon, QCursor, QColor, QTextCursor
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-    QLineEdit, QPushButton, QTableWidget, QTableWidgetItem, 
+    QLineEdit, QTextEdit, QPushButton, QTableWidget, QTableWidgetItem, 
     QHeaderView, QMessageBox, QDialog, QCompleter
 )
 
@@ -41,27 +41,44 @@ class MessageDialog(QDialog, Ui_MessageDialog):
         self.current_user_email = current_user_email  
         self.net_client = net_client      
         
-        # 💡 [수정] user_info가 있으면 관리자 여부 자동 추출, 없으면 is_admin 값 사용
         if user_info:
             self.is_admin = bool(user_info.get("is_admin", user_info.get("IS_ADMIN", 0)))
         else:
             self.is_admin = bool(is_admin)
         
         self.settings = QSettings("YoungCloud", "MessageApp")
+        
+        # 💡 [핵심 수정] 기존 UI 파일의 QLineEdit을 여러 줄 입력이 가능한 QTextEdit으로 교체하여 줄바꿈 지원
+        self.replace_line_edit_with_text_edit()
+        
         self.init_dialog_ui(content)
+
+    def replace_line_edit_with_text_edit(self):
+        """기존 UI의 QLineEdit 위젯을 여러 줄 작성이 가능한 QTextEdit으로 교체합니다."""
+        old_lineEdit = self.lineEdit
+        parent_widget = old_lineEdit.parent()
+        
+        # 기존 QLineEdit의 기하학적 위치와 스타일 계승
+        geometry = old_lineEdit.geometry()
+        old_lineEdit.deleteLater()
+        
+        self.lineEdit = QTextEdit(parent_widget)
+        self.lineEdit.setObjectName("lineEdit")
+        self.lineEdit.setGeometry(geometry)
+        self.lineEdit.setFont(QFont("나눔스퀘어", 9))
+        self.lineEdit.setStyleSheet("background-color: rgb(255, 255, 255); border: 1px solid #D0D8D2; border-radius: 4px;")
 
     def init_dialog_ui(self, content):
         if self.mode == 'view':
             self.setWindowTitle("받은 메시지 상세")
             self.label_title.setText("보낸메시지")                  
             
-            # 💡 [수정] 관리자일 경우 받은 메시지 상세에서도 보낸 사람 대신 전체 이용자 안내 표시 가능하나 원본 유지
             if self.is_admin:
                 self.label_2.setText(f"보낸 사람 : {self.sender_email} (관리자 전체 전송 모드)")
             else:
                 self.label_2.setText(f"보낸 사람 : {self.sender_email}")  
             
-            self.lineEdit.setText(content)
+            self.lineEdit.setPlainText(content)
             self.lineEdit.setReadOnly(True)                       
             
             self.pushButton_send.setText("답장")
@@ -72,7 +89,7 @@ class MessageDialog(QDialog, Ui_MessageDialog):
             self.label_title.setText("보낸메시지")
             self.label_2.setText(f"받는 사람 : {self.receiver_email}")
             
-            self.lineEdit.setText(content)
+            self.lineEdit.setPlainText(content)
             self.lineEdit.setReadOnly(True)                      
             
             self.pushButton_send.setText("확인")                 
@@ -88,9 +105,30 @@ class MessageDialog(QDialog, Ui_MessageDialog):
                 self.label_2.setText("받는 사람 : ")
                 self.setup_receiver_input()
             
-            self.lineEdit.clear()
-            self.lineEdit.setReadOnly(False)                      
-            self.lineEdit.setPlaceholderText("메시지를 입력하세요.")
+            # 서버에서 기본 메시지와 마무리 메시지를 불러와 자동 조합 (마무리 메시지는 줄바꿈 후 맨 아래 배치)
+            auto_content = ""
+            if self.net_client and self.current_user_email:
+                try:
+                    res = self.net_client.get_user_messages_config(self.current_user_email)
+                    if res.get("status") == "success":
+                        def_msg = res.get("default_message", "")
+                        outro_msg = res.get("outro_message", "")
+                        
+                        parts = []
+                        if def_msg: 
+                            parts.append(def_msg)
+                        parts.append("\n\n") # 본인 입력 공간 확보용 줄바꿈
+                        if outro_msg: 
+                            parts.append(outro_msg) # 마무리 메시지가 끝에 오도록 배치
+                        auto_content = "".join(parts)
+                except Exception as e:
+                    print(f"[메시지 설정 로드 에러]: {e}")
+
+            self.lineEdit.setPlainText(auto_content)
+            self.lineEdit.setReadOnly(False)
+            
+            # 💡 [핵심 구현] DB 본문 제한(VARCHAR 1024)에 맞춘 실시간 글자 수 초과 감지 및 차단 연결
+            self.lineEdit.textChanged.connect(self.check_message_length)
             
             self.pushButton_send.setText("보내기")
             self.pushButton_send.clicked.connect(self.confirm_and_send)
@@ -132,7 +170,6 @@ class MessageDialog(QDialog, Ui_MessageDialog):
     def switch_to_reply_mode(self):
         self.label_title.setText("보낸메시지")
         
-        # 💡 [수정] 관리자인 경우 답장 시에도 "전체 이용자"로 고정 처리
         if self.is_admin:
             self.label_2.setText("받는 사람 : 전체 이용자")
             receiver_target = "ALL"
@@ -142,7 +179,6 @@ class MessageDialog(QDialog, Ui_MessageDialog):
 
         self.lineEdit.clear()
         self.lineEdit.setReadOnly(False)
-        self.lineEdit.setPlaceholderText("답장 내용을 입력하세요.")
         self.pushButton_send.setText("보내기")
         self.pushButton_send.clicked.disconnect()
         self.pushButton_send.clicked.connect(lambda: self.send_message_process(receiver=receiver_target))
@@ -159,7 +195,7 @@ class MessageDialog(QDialog, Ui_MessageDialog):
         self.send_message_process(receiver=receiver)
 
     def send_message_process(self, receiver):
-        content = self.lineEdit.text().strip()
+        content = self.lineEdit.toPlainText().strip()
         if not content:
             QMessageBox.warning(self, "경고", "메시지 내용을 입력해주세요.")
             return
@@ -185,6 +221,24 @@ class MessageDialog(QDialog, Ui_MessageDialog):
                     self.save_recent_contact(receiver)
                 QMessageBox.information(self, "성공", f"[{target_text}]에게 메시지 전송 완료!")
                 self.accept()
+
+    def check_message_length(self):
+        """메시지 본문 글자 수가 1024자를 초과하는지 감시하고 초과 시 입력을 제한합니다."""
+        text = self.lineEdit.toPlainText()
+        if len(text) > 1024:
+            # 1024자를 초과한 경우 경고 팝업 출력
+            if not getattr(self, '_length_warning_shown', False):
+                QMessageBox.warning(self, "입력 제한", "메시지 본문은 최대 1024자까지만 입력할 수 있습니다.")
+                self._length_warning_shown = True
+            
+            # 1024자 이후의 입력은 강제로 잘라냄 (더 이상 입력 불가 처리)
+            cursor = self.lineEdit.textCursor()
+            pos = cursor.position()
+            self.lineEdit.setPlainText(text[:1024])
+            cursor.setPosition(min(pos, 1024))
+            self.lineEdit.setTextCursor(cursor)
+        else:
+            self._length_warning_shown = False         
 
 
 class MessageWidget(QWidget):

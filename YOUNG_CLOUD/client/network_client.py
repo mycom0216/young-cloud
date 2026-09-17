@@ -198,8 +198,57 @@ class NetworkClient:
         return self.send_request("get_user_storage_info", {"email": email})
 
 
+    # ==========================================
+    # 💡 [설정] 기본/마무리 메시지 관련 통신 함수
+    # ==========================================
+    def get_user_messages_config(self, email):
+        """서버로 사용자의 기본 메시지 및 마무리 메시지 조회를 요청합니다."""
+        return self.send_request("get_user_messages_config", {"email": email})
+
+    def update_user_messages_config(self, email, default_message, outro_message):
+        """서버로 사용자의 기본 메시지 및 마무리 메시지 수정을 요청합니다."""
+        return self.send_request("update_user_messages_config", {
+            "email": email,
+            "default_message": default_message,
+            "outro_message": outro_message
+        })
 
 
+    # ==========================================
+    # 💡 [설정] 블랙리스트 관리 관련 통신 함수
+    # ==========================================
+    def search_users_for_blacklist(self, owner_email, keyword):
+        """서버로 블랙리스트 검색을 위한 사용자 조회 및 차단 여부 확인을 요청합니다."""
+        return self.send_request("search_users_for_blacklist", {
+            "owner_email": owner_email,
+            "keyword": keyword
+        })
+
+    def update_blacklist_status(self, owner_email, target_email, is_block):
+        """서버로 특정 사용자의 블랙리스트 차단 등록 또는 해제를 요청합니다."""
+        return self.send_request("update_blacklist_status", {
+            "owner_email": owner_email,
+            "target_email": target_email,
+            "is_block": is_block
+        })    
+
+    def get_blocked_users_list(self, owner_email):
+            """서버로 내가 차단한 유저 목록 조회를 요청합니다."""
+            return self.send_request("get_blocked_users_list", {"owner_email": owner_email})
+        
+    # network_client.py에 추가할 통신 함수들
+
+    def get_user_download_path(self, email):
+        """서버로 사용자의 파일 받기 저장 경로 조회를 요청합니다."""
+        return self.send_request("get_user_download_path", {"email": email})
+
+    def update_user_download_path(self, email, download_path):
+        """서버로 사용자의 파일 받기 저장 경로 변경을 요청합니다."""
+        return self.send_request("update_user_download_path", {
+            "email": email,
+            "download_path": download_path
+        })    
+        
 
 # ==========================================
 # 💡 [호환성 유지 함수] login_window.py 대응

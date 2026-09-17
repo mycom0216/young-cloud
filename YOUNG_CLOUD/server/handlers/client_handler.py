@@ -165,26 +165,6 @@ class ClientHandler(threading.Thread):
                 # ===========================================
                 # 4. 메시지 기능 처리
                 # ===========================================
-                elif action == "message_received":
-                    email = data.get("email")
-                    cursor.execute("SELECT USER_ID FROM USER WHERE EMAIL = %s", (email,))
-                    user_row = cursor.fetchone()
-                    if not user_row:
-                        return {"status": "fail", "message": "사용자 정보를 찾을 수 없습니다."}
-                    
-                    sql = """
-                        SELECT m.MESSAGE_ID, u.EMAIL as SENDER_EMAIL, m.CONTENT, m.IS_READ, m.CREATED_AT
-                        FROM MESSAGE m
-                        JOIN USER u ON m.SENDER_ID = u.USER_ID
-                        WHERE m.RECEIVER_ID = %s
-                        ORDER BY m.CREATED_AT DESC
-                    """
-                    cursor.execute(sql, (user_row['USER_ID'],))
-                    messages = cursor.fetchall()
-                    for msg in messages:
-                        if msg.get('CREATED_AT'):
-                            msg['CREATED_AT'] = str(msg['CREATED_AT'])
-                    response = {"status": "success", "messages": messages}
 
                 elif action == "message_sent":
                     email = data.get("email")
@@ -577,6 +557,235 @@ class ClientHandler(threading.Thread):
                         conn.commit()
                         status_text = "차단" if is_banned else "차단 해제"
                         response = {"status": "success", "message": f"해당 사용자가 성공적으로 {status_text}되었습니다."}
+
+
+                # ===========================================
+                # 💡 [설정] 기본/마무리 메시지 설정 처리
+                # ===========================================
+                elif action == "get_user_messages_config":
+                    email = data.get("email")
+                    sql = "SELECT DEFAULT_MSG_HEADER, DEFAULT_MSG_FOOTER FROM USER WHERE EMAIL = %s"
+                    cursor.execute(sql, (email,))
+                    row = cursor.fetchone()
+                    if row:
+                        response = {
+                            "status": "success",
+                            "default_message": row.get('DEFAULT_MSG_HEADER', ''),
+                            "outro_message": row.get('DEFAULT_MSG_FOOTER', '')
+                        }
+                    else:
+                        response = {"status": "fail", "message": "사용자 정보를 찾을 수 없습니다."}
+
+                elif action == "update_user_messages_config":
+                    email = data.get("email")
+                    default_message = data.get("default_message", "")
+                    outro_message = data.get("outro_message", "")
+                    
+                    sql = "UPDATE USER SET DEFAULT_MSG_HEADER = %s, DEFAULT_MSG_FOOTER = %s WHERE EMAIL = %s"
+                    cursor.execute(sql, (default_message, outro_message, email))
+                    conn.commit()
+                    response = {"status": "success", "message": "메시지 설정이 저장되었습니다."}
+
+# client_handler.py의 route_request 내부에 추가/수정할 백엔드 로직
+
+                # ===========================================
+                # 💡 [블랙리스트 기능] 사용자 검색 및 차단 상태 조회
+                # ===========================================
+                elif action == "search_users_for_blacklist":
+                    owner_email = data.get("owner_email")
+                    keyword = data.get("keyword", "")
+                    
+                    # 1. 내 USER_ID 조회
+                    cursor.execute("SELECT USER_ID FROM USER WHERE EMAIL = %s", (owner_email,))
+                    owner_row = cursor.fetchone()
+                    if not owner_row:
+                        response = {"status": "fail", "message": "사용자 정보를 찾을 수 없습니다."}
+                    else:
+                        owner_id = owner_row['USER_ID']
+                        
+                        # 2. 키워드가 포함된 유저 검색 (검색어 일치, 내 자신 제외)
+                        sql = """
+                            SELECT u.USER_ID, u.EMAIL, u.NAME,
+                                   (SELECT COUNT(*) FROM BLACKLIST b 
+                                    WHERE b.USER_ID = %s AND b.BLOCKED_USER_ID = u.USER_ID) AS IS_BLOCKED
+                            FROM USER u
+                            WHERE (u.EMAIL LIKE %s OR u.NAME LIKE %s) AND u.USER_ID != %s
+                        """
+                        search_pattern = f"%{keyword}%"
+                        cursor.execute(sql, (owner_id, search_pattern, search_pattern, owner_id))
+                        users = cursor.fetchall()
+                        
+                        # 결과를 불리언(True/False) 형태로 변환
+                        for u in users:
+                            u['IS_BLOCKED'] = bool(u['IS_BLOCKED'])
+                            
+                        response = {"status": "success", "users": users}
+
+                # ===========================================
+                # 💡 [블랙리스트 기능] 차단 등록 및 해제 처리 (BLACKLIST 테이블 연동)
+                # ===========================================
+                elif action == "update_blacklist_status":
+                    owner_email = data.get("owner_email")
+                    target_email = data.get("target_email")
+                    is_block = data.get("is_block") # True: 차단 등록, False: 차단 해제
+                    
+                    # 내 ID와 상대방 ID 조회
+                    cursor.execute("SELECT USER_ID FROM USER WHERE EMAIL = %s", (owner_email,))
+                    owner_row = cursor.fetchone()
+                    cursor.execute("SELECT USER_ID FROM USER WHERE EMAIL = %s", (target_email,))
+                    target_row = cursor.fetchone()
+                    
+                    if not owner_row or not target_row:
+                        response = {"status": "fail", "message": "사용자 정보를 찾을 수 없습니다."}
+                    else:
+                        owner_id = owner_row['USER_ID']
+                        target_id = target_row['USER_ID']
+                        
+                        if is_block:
+                            # 이미 차단되어 있는지 확인 후 INSERT
+                            cursor.execute("""
+                                SELECT BLACKLIST_ID FROM BLACKLIST 
+                                WHERE USER_ID = %s AND BLOCKED_USER_ID = %s
+                            """, (owner_id, target_id))
+                            if not cursor.fetchone():
+                                cursor.execute("""
+                                    INSERT INTO BLACKLIST (USER_ID, BLOCKED_USER_ID) 
+                                    VALUES (%s, %s)
+                                """, (owner_id, target_id))
+                                conn.commit()
+                            response = {"status": "success", "message": "블랙리스트에 차단 등록되었습니다."}
+                        else:
+                            # 차단 해제 (DELETE)
+                            cursor.execute("""
+                                DELETE FROM BLACKLIST 
+                                WHERE USER_ID = %s AND BLOCKED_USER_ID = %s
+                            """, (owner_id, target_id))
+                            conn.commit()
+                            response = {"status": "success", "message": "블랙리스트 차단이 해제되었습니다."}
+
+                # ===========================================
+                # 💡 [메시지 수신함 조회 수정] 블랙리스트 회원 필터링 적용
+                # ===========================================
+                elif action == "message_received":
+                    email = data.get("email")
+                    cursor.execute("SELECT USER_ID FROM USER WHERE EMAIL = %s", (email,))
+                    user_row = cursor.fetchone()
+                    if not user_row:
+                        return {"status": "fail", "message": "사용자 정보를 찾을 수 없습니다."}
+                    
+                    my_user_id = user_row['USER_ID']
+                    
+                    # 💡 핵심 요구사항: 내가(RECEIVER) 차단한 사람(SENDER)이 보낸 메시지는 조회되지 않도록 NOT IN 서브쿼리 추가
+                    sql = """
+                        SELECT m.MESSAGE_ID, u.EMAIL as SENDER_EMAIL, m.CONTENT, m.IS_READ, m.CREATED_AT
+                        FROM MESSAGE m
+                        JOIN USER u ON m.SENDER_ID = u.USER_ID
+                        WHERE m.RECEIVER_ID = %s
+                          AND m.SENDER_ID NOT IN (
+                              SELECT BLOCKED_USER_ID FROM BLACKLIST WHERE USER_ID = %s
+                          )
+                        ORDER BY m.CREATED_AT DESC
+                    """
+                    cursor.execute(sql, (my_user_id, my_user_id))
+                    messages = cursor.fetchall()
+                    for msg in messages:
+                        if msg.get('CREATED_AT'):
+                            msg['CREATED_AT'] = str(msg['CREATED_AT'])
+                    response = {"status": "success", "messages": messages}
+
+                elif action == "get_blocked_users_list":
+                                    owner_email = data.get("owner_email")
+                                    cursor.execute("SELECT USER_ID FROM USER WHERE EMAIL = %s", (owner_email,))
+                                    owner_row = cursor.fetchone()
+                                    if not owner_row:
+                                        response = {"status": "fail", "message": "사용자 정보를 찾을 수 없습니다."}
+                                    else:
+                                        sql = """
+                                            SELECT u.EMAIL, u.NAME, b.CREATED_AT
+                                            FROM BLACKLIST b
+                                            JOIN USER u ON b.BLOCKED_USER_ID = u.USER_ID
+                                            WHERE b.USER_ID = %s
+                                            ORDER BY b.CREATED_AT DESC
+                                        """
+                                        cursor.execute(sql, (owner_row['USER_ID'],))
+                                        blocked_users = cursor.fetchall()
+                                        for u in blocked_users:
+                                            if u.get('CREATED_AT'):
+                                                u['CREATED_AT'] = str(u['CREATED_AT'])
+                                        response = {"status": "success", "users": blocked_users}
+    
+
+                # ===========================================
+                # 💡 [설정] 파일 받기 저장 경로 설정 처리
+                # ===========================================
+                elif action == "get_user_download_path":
+                    email = data.get("email")
+                    # USER 테이블에 DOWNLOAD_PATH 컬럼이 있다고 가정 (없을 경우 기본값 반환)
+                    sql = "SELECT DOWNLOAD_PATH FROM USER WHERE EMAIL = %s"
+                    cursor.execute(sql, (email,))
+                    row = cursor.fetchone()
+                    if row and row.get('DOWNLOAD_PATH'):
+                        response = {"status": "success", "download_path": row.get('DOWNLOAD_PATH')}
+                    else:
+                        # 설정된 경로가 없다면 기본 다운로드 경로 반환 (예: 사용자 홈 디렉토리 내 Downloads)
+                        default_path = os.path.join(os.path.expanduser("~"), "Downloads")
+                        response = {"status": "success", "download_path": default_path}
+
+                elif action == "update_user_download_path":
+                    email = data.get("email")
+                    download_path = data.get("download_path")
+                    
+                    sql = "UPDATE USER SET DOWNLOAD_PATH = %s WHERE EMAIL = %s"
+                    cursor.execute(sql, (download_path, email))
+                    conn.commit()
+                    response = {"status": "success", "message": "파일 받기 저장 경로가 변경되었습니다."}
+
+                # ===========================================
+                # 💡 [클라우드 용량 계산] 서버 실제 용량 + DB 반영
+                # ===========================================
+                elif action == "cloud_storage_info":
+                    email = data.get("email")
+                    cursor.execute("SELECT USER_ID, COMP, EMAIL FROM USER WHERE EMAIL = %s", (email,))
+                    user = cursor.fetchone()
+                    
+                    if not user:
+                        response = {"status": "fail", "message": "사용자 정보를 찾을 수 없습니다."}
+                    else:
+                        user_id = user['USER_ID']
+                        comp = user['COMP'] or "DEFAULT_COMP"
+                        user_email = user['EMAIL']
+                        
+                        # 1. 서버 내 실제 사용자 폴더 경로 계산
+                        user_storage_dir = os.path.join(CLOUD_STORAGE_DIR, comp, user_email)
+                        
+                        total_size_bytes = 0
+                        if os.path.exists(user_storage_dir):
+                            # 폴더 내 모든 파일의 실제 용량을 합산 (휴지통 제외 또는 전체 실사용량)
+                            for root, dirs, files in os.walk(user_storage_dir):
+                                for f in files:
+                                    fp = os.path.join(root, f)
+                                    if os.path.exists(fp):
+                                        total_size_bytes += os.path.getsize(fp)
+                                        
+                        # 2. 서비스 등급별 최대 용량 조회
+                        cursor.execute("""
+                            SELECT s.GRADE_NAME, s.MAX_STORAGE 
+                            FROM USER u 
+                            JOIN SERVICE s ON u.SERVICE_ID = s.SERVICE_ID 
+                            WHERE u.USER_ID = %s
+                        """, (user_id,))
+                        service_row = cursor.fetchone()
+                        
+                        grade_name = service_row['GRADE_NAME'] if service_row else "일반"
+                        max_storage = service_row['MAX_STORAGE'] if service_row else (500 * 1024 * 1024)
+                        
+                        response = {
+                            "status": "success",
+                            "grade_name": grade_name,
+                            "max_storage": max_storage,
+                            "total_used": total_size_bytes  # 사용자가 파일을 지우면 os.walk를 통해 자동으로 용량이 줄어듦
+                        }                    
+
 
             except Exception as e:
                 response = {"status": "error", "message": f"데이터베이스 오류: {str(e)}"}
