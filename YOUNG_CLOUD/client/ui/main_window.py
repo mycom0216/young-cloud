@@ -27,8 +27,9 @@ from PySide6.QtWidgets import (
     QFrame
 )
 
-from dialog.home_widget import HomeWidget, CalenderWidget
-from settings_window import ServiceSettingWidget
+from dialog.home_widget import HomeWidget
+from dialog.home_widget import CalenderWidget
+from settings_window import ServiceSettingWidget, UserInfoSettingWidget
 from message_window import MessageWidget, MessageDialog, SentMessageWidget
 from admin_window import AdminServiceWidget
 
@@ -389,10 +390,15 @@ class MainWindow(QMainWindow):
             elif name == "서비스 확인 및 변경":
                 user_email = self.user_info.get("email", "user@example.com")
                 self.content_pages[name] = ServiceSettingWidget(
-                    user_email=user_email, 
+                                    user_email=user_email, 
+                                    net_client=self.net_client
+                                )
+            elif name == "개인정보변경":  # 💡 개인정보변경 위젯 연결
+                self.content_pages[name] = UserInfoSettingWidget(
+                    user_info=self.user_info,
                     net_client=self.net_client
                 )    
-            elif name in ["받은메시지", "메시지함"]:
+            elif name in ["받은메시지", "메시지함"]:  # 👈 메시지 위젯 연결
                 self.content_pages[name] = MessageWidget(self.user_info)
             elif name == "보낸메시지":
                 self.content_pages[name] = SentMessageWidget(self.user_info)
