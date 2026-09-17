@@ -3,7 +3,6 @@ YOUNG_CLOUD/
 ├── server/                      # [서버 팀 담당]
 │   ├── server.py                # 단일 통합 서버 파일 (네트워크, DB 연동, 요청 라우팅)
 │   ├── client_hendler.py      # 클라이언트 스레드 생성
-│   ├── database.db              # SQLite 데이터베이스 파일 (또는 MariaDB 연동 모듈)
 │   └── cloud_storage/           # 서버 측 파일 저장 디렉토리 (클라우드 파일 보관함)
 │
 ├── client/                      # [클라이언트 팀 공동/파트별 담당]
@@ -25,7 +24,7 @@ YOUNG_CLOUD/
 ├── .gitignore                   # Git 제외 대상 설정 (.db 파일, 캐시 등)
 ├── requirements.txt             # 라이브러리 목록 (PySide6, yagmail 등)
 └── README.md                    # 프로젝트 소개 및 실행 방법
-
+ |── database.db              # SQLite 데이터베이스 파일 (또는 MariaDB 연동 모듈) 은 다른 폴더에 있음
 
 
 #####메인 컨텐츠 영역

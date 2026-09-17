@@ -1,6 +1,7 @@
 import socket
 import json
 import os
+import struct  # 💡 데이터 길이를 4바이트 헤더로 패킹/언패킹하기 위해 추가
 
 class NetworkClient:
     """서버와 TCP 연결을 맺고 메시지 및 클라우드 데이터를 송수신하는 공용 통신 클래스"""
@@ -18,10 +19,19 @@ class NetworkClient:
         except Exception as e:
             print(f"[네트워크 에러] 서버 연결 실패: {e}")
             return False
+        
+    def _recv_all(self, sock, n):
+        """지정한 n 바이트를 모두 수신할 때까지 반복 수신하는 Helper 함수"""
+        data = bytearray()
+        while len(data) < n:
+            packet = sock.recv(n - len(data))
+            if not packet:
+                return None
+            data.extend(packet)
+        return bytes(data)
 
     def send_request(self, action, data=None):
         """서버로 작업 요청(Action)과 데이터를 전송하고 응답을 받아오는 함수"""
-        # 💡 매번 새로 연결하여 통신 충돌 방지
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.connect((self.host, self.port))
@@ -31,11 +41,28 @@ class NetworkClient:
                 "data": data or {}
             }
             
-            sock.sendall(json.dumps(payload).encode('utf-8'))
-            response_data = sock.recv(4096)
+            # 1. 요청 데이터 인코딩 및 4바이트 길이 헤더 전송
+            json_bytes = json.dumps(payload).encode('utf-8')
+            header = struct.pack('>I', len(json_bytes))
+            sock.sendall(header + json_bytes)
+
+            # 2. 서버 응답의 4바이트 길이 헤더 수신
+            raw_length = self._recv_all(sock, 4)
+            if not raw_length:
+                sock.close()
+                return {"status": "error", "message": "서버 응답 없음"}
+
+            data_length = struct.unpack('>I', raw_length)[0]
+
+            # 3. 데이터 길이만큼 전체 바디 완벽 수신
+            body_bytes = self._recv_all(sock, data_length)
             sock.close()
-            
-            return json.loads(response_data.decode('utf-8'))
+
+            if not body_bytes:
+                return {"status": "error", "message": "데이터 수신 손실"}
+
+            # 4. 완벽히 수신된 데이터만 JSON 파싱
+            return json.loads(body_bytes.decode('utf-8'))
         except Exception as e:
             print(f"[네트워크 에러] 데이터 송수신 중 오류 발생: {e}")
             self.close()
@@ -171,8 +198,57 @@ class NetworkClient:
         return self.send_request("get_user_storage_info", {"email": email})
 
 
+    # ==========================================
+    # 💡 [설정] 기본/마무리 메시지 관련 통신 함수
+    # ==========================================
+    def get_user_messages_config(self, email):
+        """서버로 사용자의 기본 메시지 및 마무리 메시지 조회를 요청합니다."""
+        return self.send_request("get_user_messages_config", {"email": email})
+
+    def update_user_messages_config(self, email, default_message, outro_message):
+        """서버로 사용자의 기본 메시지 및 마무리 메시지 수정을 요청합니다."""
+        return self.send_request("update_user_messages_config", {
+            "email": email,
+            "default_message": default_message,
+            "outro_message": outro_message
+        })
 
 
+    # ==========================================
+    # 💡 [설정] 블랙리스트 관리 관련 통신 함수
+    # ==========================================
+    def search_users_for_blacklist(self, owner_email, keyword):
+        """서버로 블랙리스트 검색을 위한 사용자 조회 및 차단 여부 확인을 요청합니다."""
+        return self.send_request("search_users_for_blacklist", {
+            "owner_email": owner_email,
+            "keyword": keyword
+        })
+
+    def update_blacklist_status(self, owner_email, target_email, is_block):
+        """서버로 특정 사용자의 블랙리스트 차단 등록 또는 해제를 요청합니다."""
+        return self.send_request("update_blacklist_status", {
+            "owner_email": owner_email,
+            "target_email": target_email,
+            "is_block": is_block
+        })    
+
+    def get_blocked_users_list(self, owner_email):
+            """서버로 내가 차단한 유저 목록 조회를 요청합니다."""
+            return self.send_request("get_blocked_users_list", {"owner_email": owner_email})
+        
+    # network_client.py에 추가할 통신 함수들
+
+    def get_user_download_path(self, email):
+        """서버로 사용자의 파일 받기 저장 경로 조회를 요청합니다."""
+        return self.send_request("get_user_download_path", {"email": email})
+
+    def update_user_download_path(self, email, download_path):
+        """서버로 사용자의 파일 받기 저장 경로 변경을 요청합니다."""
+        return self.send_request("update_user_download_path", {
+            "email": email,
+            "download_path": download_path
+        })    
+        
 
 # ==========================================
 # 💡 [호환성 유지 함수] login_window.py 대응
