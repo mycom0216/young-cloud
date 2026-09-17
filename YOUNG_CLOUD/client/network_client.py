@@ -208,6 +208,20 @@ class NetworkClient:
     def get_blocked_users_list(self, owner_email):
             """서버로 내가 차단한 유저 목록 조회를 요청합니다."""
             return self.send_request("get_blocked_users_list", {"owner_email": owner_email})
+        
+    # network_client.py에 추가할 통신 함수들
+
+    def get_user_download_path(self, email):
+        """서버로 사용자의 파일 받기 저장 경로 조회를 요청합니다."""
+        return self.send_request("get_user_download_path", {"email": email})
+
+    def update_user_download_path(self, email, download_path):
+        """서버로 사용자의 파일 받기 저장 경로 변경을 요청합니다."""
+        return self.send_request("update_user_download_path", {
+            "email": email,
+            "download_path": download_path
+        })    
+        
 
 # ==========================================
 # 💡 [호환성 유지 함수] login_window.py 대응

@@ -1,7 +1,8 @@
 # settings_window.py
 import re
+import os
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QDialog,
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QDialog, QFileDialog,
     QPushButton, QFrame, QMessageBox, QLineEdit, 
     QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView
 )
@@ -66,22 +67,9 @@ class UserInfoSettingWidget(QWidget):
         main_layout.setContentsMargins(40, 30, 40, 30)
         main_layout.setSpacing(0)
 
-        self.init_header(main_layout)
         self.init_form_inputs(main_layout)
         self.init_bottom_button(main_layout)
         self.load_user_info()
-
-    def init_header(self, parent_layout):
-        header_layout = QVBoxLayout()
-        header_layout.setSpacing(12)
-        header_layout.setContentsMargins(50, 0, 0, 0)
-      
-        self.grade_label = QLabel(f"등급 :    {self.user_grade}")
-        self.grade_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #1E293B;")
-
-        header_layout.addWidget(self.grade_label)
-        parent_layout.addLayout(header_layout)
-        parent_layout.addSpacing(40)
 
     def init_form_inputs(self, parent_layout):
         form_layout = QVBoxLayout()
@@ -113,6 +101,23 @@ class UserInfoSettingWidget(QWidget):
             }
             QPushButton:hover { background-color: #40D4DC; }
         """
+        # 0) 등급 (아이디 위로 이동)
+        grade_box = QHBoxLayout()
+        grade_box.setSpacing(15)
+        lbl_grade_title = QLabel("등급 :")
+        lbl_grade_title.setFixedWidth(80)
+        lbl_grade_title.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        lbl_grade_title.setStyleSheet(label_style)
+
+        # 등급 값 표시용 텍스트 (QLabel)
+        self.grade_val_label = QLabel(self.user_grade)
+        self.grade_val_label.setStyleSheet("font-size: 15px; font-weight: bold; color: #1E293B;")
+
+        grade_box.addWidget(lbl_grade_title)
+        grade_box.addWidget(self.grade_val_label)
+        grade_box.addStretch()
+
+
 
         # 1) 아이디
         id_box = QHBoxLayout()
@@ -219,7 +224,8 @@ class UserInfoSettingWidget(QWidget):
         res = self.settings_client.get_service_info(self.user_email)
         if isinstance(res, dict) and res.get("status") == "success":
             self.user_grade = res.get("grade_name", "VIP")
-            self.grade_label.setText(f"등급 :    {self.user_grade}")
+            self.grade_val_label.setText(self.user_grade)
+           
 
     def on_name_changed(self):
         self.is_name_checked = False
@@ -353,10 +359,10 @@ class ServiceSettingWidget(QWidget):
             info_layout.setSpacing(4)
             cap_title_label = QLabel("용량")
             cap_title_label.setAlignment(Qt.AlignCenter)
-            cap_title_label.setStyleSheet("font-size: 15px; color: #1E293B;")
+            cap_title_label.setStyleSheet("font-size: 13px; color: #1E293B; border: none;")
             cap_val_label = QLabel(f"최대 {storage}")
             cap_val_label.setAlignment(Qt.AlignCenter)
-            cap_val_label.setStyleSheet("font-size: 15px; color: #1E293B;")
+            cap_val_label.setStyleSheet("font-size: 13px; color: #1E293B; border: none;")
 
             info_layout.addWidget(cap_title_label)
             info_layout.addWidget(cap_val_label)
@@ -394,6 +400,22 @@ class ServiceSettingWidget(QWidget):
     def select_tier(self, tier_name):
         self.selected_tier = tier_name
         self.update_card_styles()
+        # 모든 카드를 순회하며 선택된 카드만 배경색 적용, 나머지는 기본 상태로 복구
+        for name, card in self.tier_cards.items():
+            if name == tier_name:
+                # 선택된 카드: 하얀색 반투명 배경 적용 (테두리는 기존 설정 유지)
+                card.setStyleSheet("""
+                    background-color: rgba(255, 255, 255, 204); 
+                    border: 1px solid #00838F; 
+                    border-radius: 12px;
+                """)
+            else:
+                # 선택되지 않은 카드: 배경 투명(기본)
+                card.setStyleSheet("""
+                    background-color: transparent; 
+                    border: 1px solid #00838F; 
+                    border-radius: 12px;
+                """)
 
     def update_card_styles(self):
         for name, card in self.tier_cards.items():
@@ -915,3 +937,147 @@ class BlacklistSettingWidget(QWidget):
         # 다이얼로그가 닫히면 현재 검색 결과 새로고침
         if self.search_input.text().strip():
             self.search_users()
+            
+# settings_window.py 파일 하단에 추가할 클라우드 설정 위젯 클래스
+
+class CloudSettingWidget(QWidget):
+    """
+    💡 [클라우드 설정 화면]
+    - 파일 받기 저장 경로 확인 및 [변경하기] 다이얼로그 연동 기능
+    - 서버에 저장된 실제 파일 용량 실시간 연동 및 삭제 시 자동 반영 기능
+    """
+    def __init__(self, user_info: dict = None, net_client=None):
+        super().__init__()
+        self.user_info = user_info or {}
+        self.net_client = net_client
+        self.user_email = self.user_info.get("email", "")
+
+        # 전체 위젯 배경색 및 기본 폰트 설정
+        self.setStyleSheet("background-color: #EFF7F4; font-family: 'Malgun Gothic', sans-serif;")
+
+        # 메인 레이아웃 생성
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(40, 30, 40, 30)
+        main_layout.setSpacing(20)
+
+        # 1. 화면 제목 라벨
+        title_label = QLabel("클라우드 환경 설정")
+        title_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #1E293B;")
+        main_layout.addWidget(title_label)
+
+        # 구분선 생성
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setStyleSheet("background-color: #CBD5E1; max-height: 1px;")
+        main_layout.addWidget(line)
+
+        # 2. 파일 받기 저장 경로 설정 영역 레이아웃
+        path_layout = QHBoxLayout()
+        path_layout.setSpacing(15)
+
+        lbl_path_title = QLabel("파일 받기 경로:")
+        lbl_path_title.setFixedWidth(110)
+        lbl_path_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #334155;")
+
+        # 저장 경로를 보여주는 텍스트 박스 (사용자가 직접 수정하지 못하도록 읽기 전용 설정)
+        self.input_path = QLineEdit()
+        self.input_path.setReadOnly(True)
+        self.input_path.setStyleSheet("""
+            QLineEdit {
+                background-color: #FFFFFF;
+                border: 1px solid #CBD5E1;
+                border-radius: 6px;
+                padding: 8px 12px;
+                font-size: 13px;
+                color: #334155;
+            }
+        """)
+
+        # 폴더 선택 다이얼로그를 띄우는 '변경하기' 버튼
+        btn_change_path = QPushButton("변경하기")
+        btn_change_path.setFixedSize(90, 38)
+        btn_change_path.setCursor(Qt.PointingHandCursor)
+        btn_change_path.setStyleSheet("""
+            QPushButton {
+                background-color: #55E6ED;
+                color: #000000;
+                font-size: 13px;
+                font-weight: bold;
+                border: none;
+                border-radius: 6px;
+            }
+            QPushButton:hover { background-color: #40D4DC; }
+        """)
+        # 버튼 클릭 시 폴더 선택 다이얼로그 함수 연결
+        btn_change_path.clicked.connect(self.open_folder_dialog)
+
+        path_layout.addWidget(lbl_path_title)
+        path_layout.addWidget(self.input_path)
+        path_layout.addWidget(btn_change_path)
+        main_layout.addLayout(path_layout)
+
+        # 3. 클라우드 용량 정보 표시 영역
+        self.storage_info_label = QLabel("현재 클라우드 사용량 정보를 불러오는 중입니다...")
+        self.storage_info_label.setStyleSheet("font-size: 14px; color: #475569; margin-top: 10px;")
+        main_layout.addWidget(self.storage_info_label)
+
+        main_layout.addStretch()  # 아래 공간 채우기
+
+        # 초기 데이터 불러오기 실행
+        self.load_settings_data()
+
+    def load_settings_data(self):
+        """서버로부터 사용자의 저장 경로와 실제 사용 중인 클라우드 용량을 불러옵니다."""
+        if not self.net_client or not self.user_email:
+            # 네트워크가 없을 경우 기본값 세팅
+            default_download = os.path.join(os.path.expanduser("~"), "Downloads")
+            self.input_path.setText(default_download)
+            self.storage_info_label.setText("클라우드 용량: 0 MB / 500 MB (일반 회원)")
+            return
+
+        # 1. 파일 받기 저장 경로 조회 요청
+        res_path = self.net_client.get_user_download_path(self.user_email)
+        if res_path.get("status") == "success":
+            self.input_path.setText(res_path.get("download_path", ""))
+        else:
+            default_download = os.path.join(os.path.expanduser("~"), "Downloads")
+            self.input_path.setText(default_download)
+
+        # 2. 클라우드 용량 정보 조회 요청 (서버내 사용자 폴더 실사용량 반영)
+        res_storage = self.net_client.get_user_storage_info(self.user_email)
+        if res_storage.get("status") == "success":
+            grade_name = res_storage.get("grade_name", "일반")
+            max_bytes = res_storage.get("max_storage", 500 * 1024 * 1024)
+            used_bytes = res_storage.get("total_used", 0)
+
+            # 바이트를 MB 단위로 보기 쉽게 변환
+            used_mb = used_bytes / (1024 * 1024)
+            max_mb = max_bytes / (1024 * 1024)
+
+            self.storage_info_label.setText(
+                f"📊 현재 클라우드 사용량: {used_mb:.1f} MB / {max_mb:.0f} MB (등급: {grade_name})\n"
+                f"💡 파일을 삭제하거나 휴지통에서 영구 삭제하면 사용 가능한 용량이 자동으로 늘어납니다."
+            )
+
+    def open_folder_dialog(self):
+        """변경하기 버튼을 누를 때 호출되는 폴더 선택 다이얼로그 창"""
+        # QFileDialog를 이용해 로컬 컴퓨터의 폴더를 선택할 수 있는 창을 띄웁니다.
+        dir_path = QFileDialog.getExistingDirectory(
+            self, 
+            "파일 받기 저장 경로 선택", 
+            self.input_path.text()  # 기존에 설정된 경로를 기본으로 보여줌
+        )
+
+        # 사용자가 폴더를 선택하고 취소하지 않았을 경우
+        if dir_path:
+            # 경로 구분자를 윈도우/리맥스 환경에 맞게 정돈
+            normalized_path = os.path.normpath(dir_path)
+            self.input_path.setText(normalized_path)
+
+            # 서버에 변경된 저장 경로 저장 요청
+            if self.net_client and self.user_email:
+                res = self.net_client.update_user_download_path(self.user_email, normalized_path)
+                if res.get("status") == "success":
+                    QMessageBox.information(self, "성공", "파일 받기 저장 경로가 성공적으로 변경되었습니다.")
+                else:
+                    QMessageBox.warning(self, "경고", "경로 변경 저장을 실패했습니다.")            

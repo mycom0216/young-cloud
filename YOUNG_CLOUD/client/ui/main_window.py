@@ -422,6 +422,13 @@ class MainWindow(QMainWindow):
                 self.content_pages[name] = BlacklistSettingWidget(
                     user_info=self.user_info, net_client=self.net_client
                 )    
+            elif name == "클라우드 설정":
+                from settings_window import CloudSettingWidget
+                self.content_pages[name] = CloudSettingWidget(
+                    user_info=self.user_info, net_client=self.net_client
+                )    
+                
+                
             else:
                 self.content_pages[name] = PlaceholderView(name)
 

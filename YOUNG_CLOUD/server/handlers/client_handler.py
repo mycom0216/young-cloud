@@ -699,6 +699,78 @@ class ClientHandler(threading.Thread):
                                             if u.get('CREATED_AT'):
                                                 u['CREATED_AT'] = str(u['CREATED_AT'])
                                         response = {"status": "success", "users": blocked_users}
+    
+
+                # ===========================================
+                # 💡 [설정] 파일 받기 저장 경로 설정 처리
+                # ===========================================
+                elif action == "get_user_download_path":
+                    email = data.get("email")
+                    # USER 테이블에 DOWNLOAD_PATH 컬럼이 있다고 가정 (없을 경우 기본값 반환)
+                    sql = "SELECT DOWNLOAD_PATH FROM USER WHERE EMAIL = %s"
+                    cursor.execute(sql, (email,))
+                    row = cursor.fetchone()
+                    if row and row.get('DOWNLOAD_PATH'):
+                        response = {"status": "success", "download_path": row.get('DOWNLOAD_PATH')}
+                    else:
+                        # 설정된 경로가 없다면 기본 다운로드 경로 반환 (예: 사용자 홈 디렉토리 내 Downloads)
+                        default_path = os.path.join(os.path.expanduser("~"), "Downloads")
+                        response = {"status": "success", "download_path": default_path}
+
+                elif action == "update_user_download_path":
+                    email = data.get("email")
+                    download_path = data.get("download_path")
+                    
+                    sql = "UPDATE USER SET DOWNLOAD_PATH = %s WHERE EMAIL = %s"
+                    cursor.execute(sql, (download_path, email))
+                    conn.commit()
+                    response = {"status": "success", "message": "파일 받기 저장 경로가 변경되었습니다."}
+
+                # ===========================================
+                # 💡 [클라우드 용량 계산] 서버 실제 용량 + DB 반영
+                # ===========================================
+                elif action == "cloud_storage_info":
+                    email = data.get("email")
+                    cursor.execute("SELECT USER_ID, COMP, EMAIL FROM USER WHERE EMAIL = %s", (email,))
+                    user = cursor.fetchone()
+                    
+                    if not user:
+                        response = {"status": "fail", "message": "사용자 정보를 찾을 수 없습니다."}
+                    else:
+                        user_id = user['USER_ID']
+                        comp = user['COMP'] or "DEFAULT_COMP"
+                        user_email = user['EMAIL']
+                        
+                        # 1. 서버 내 실제 사용자 폴더 경로 계산
+                        user_storage_dir = os.path.join(CLOUD_STORAGE_DIR, comp, user_email)
+                        
+                        total_size_bytes = 0
+                        if os.path.exists(user_storage_dir):
+                            # 폴더 내 모든 파일의 실제 용량을 합산 (휴지통 제외 또는 전체 실사용량)
+                            for root, dirs, files in os.walk(user_storage_dir):
+                                for f in files:
+                                    fp = os.path.join(root, f)
+                                    if os.path.exists(fp):
+                                        total_size_bytes += os.path.getsize(fp)
+                                        
+                        # 2. 서비스 등급별 최대 용량 조회
+                        cursor.execute("""
+                            SELECT s.GRADE_NAME, s.MAX_STORAGE 
+                            FROM USER u 
+                            JOIN SERVICE s ON u.SERVICE_ID = s.SERVICE_ID 
+                            WHERE u.USER_ID = %s
+                        """, (user_id,))
+                        service_row = cursor.fetchone()
+                        
+                        grade_name = service_row['GRADE_NAME'] if service_row else "일반"
+                        max_storage = service_row['MAX_STORAGE'] if service_row else (500 * 1024 * 1024)
+                        
+                        response = {
+                            "status": "success",
+                            "grade_name": grade_name,
+                            "max_storage": max_storage,
+                            "total_used": total_size_bytes  # 사용자가 파일을 지우면 os.walk를 통해 자동으로 용량이 줄어듦
+                        }                    
 
 
             except Exception as e:
