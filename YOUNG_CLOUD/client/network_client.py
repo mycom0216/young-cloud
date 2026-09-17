@@ -5,7 +5,7 @@ import struct  # 💡 데이터 길이를 4바이트 헤더로 패킹/언패킹�
 
 class NetworkClient:
     """서버와 TCP 연결을 맺고 메시지 및 클라우드 데이터를 송수신하는 공용 통신 클래스"""
-    def __init__(self, host='127.0.0.1', port=8888):
+    def __init__(self, host='10.10.10.113', port=8888):
         self.host = host
         self.port = port
         self.sock = None
