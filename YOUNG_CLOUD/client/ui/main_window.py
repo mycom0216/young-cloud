@@ -307,7 +307,7 @@ class MainWindow(QMainWindow):
         
         
     def load_and_update_storage_info(self):
-            """서버에서 현재 사용자의 사용량과 등급별 최대 용량을 가져와 사이드바에 반영합니다."""
+            """서버에서 현재 사용자의 사용량과 등급별 최대 용량을 가져와 사이드바 및 홈 화면에 반영합니다."""
             user_email = self.user_info.get("email")
             if not user_email or not self.net_client:
                 return
@@ -329,7 +329,7 @@ class MainWindow(QMainWindow):
                 else:
                     percent = 0
 
-                # 사이드바 라벨 및 프로그래스바 갱신 (예: "24MB / 500MB | VIP" 또는 간소화 형태)
+                # 사이드바 라벨 및 프로그래스바 갱신
                 if max_mb >= 1024:
                     used_str = f"{used_mb / 1024:.1f}GB"
                     max_str = f"{max_mb / 1024:.0f}GB"
@@ -345,6 +345,11 @@ class MainWindow(QMainWindow):
                 self.user_info["max_storage"] = max_storage_bytes
                 self.user_info["total_used"] = total_used_bytes
                 self.user_info["storage_percent"] = percent
+
+                # 💡 홈 메인 위젯이 생성되어 있다면 최신 사용자 정보로 동기화 갱신
+                home_page = self.content_pages.get("홈 메인")
+                if home_page and hasattr(home_page, "update_user_info"):
+                    home_page.update_user_info(self.user_info)
 
     def init_content_area(self, parent_layout):
         self.content_area = QWidget()
