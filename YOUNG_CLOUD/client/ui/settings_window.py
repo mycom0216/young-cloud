@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QPushButton, QFrame, QMessageBox, QLineEdit, 
     QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QSettings
 
 
 class SettingsClient:
@@ -399,21 +399,26 @@ class ServiceSettingWidget(QWidget):
 
     def select_tier(self, tier_name):
         self.selected_tier = tier_name
-        self.update_card_styles()
-        # 모든 카드를 순회하며 선택된 카드만 배경색 적용, 나머지는 기본 상태로 복구
+        
+        # 기본 테두리 설정 (모든 카드 동일)
+        default_border = "2px solid #00838F;" # 굵기를 2px로 통일
+        
+        # 선택된 카드 스타일 (색상만 변경)
+        selected_border_color = "#005662" # 더 진한 색
+        
         for name, card in self.tier_cards.items():
             if name == tier_name:
-                # 선택된 카드: 하얀색 반투명 배경 적용 (테두리는 기존 설정 유지)
-                card.setStyleSheet("""
+                # 선택된 카드: 두꺼운 테두리 유지 + 더 진한 색상 + 선택된 카드 내부 배경
+                card.setStyleSheet(f"""
                     background-color: rgba(255, 255, 255, 204); 
-                    border: 1px solid #00838F; 
+                    border: 2px solid {selected_border_color}; 
                     border-radius: 12px;
                 """)
             else:
-                # 선택되지 않은 카드: 배경 투명(기본)
-                card.setStyleSheet("""
+                # 선택되지 않은 카드: 두꺼운 테두리 유지 + 기본 색상
+                card.setStyleSheet(f"""
                     background-color: transparent; 
-                    border: 1px solid #00838F; 
+                    border: {default_border}; 
                     border-radius: 12px;
                 """)
 
@@ -943,14 +948,16 @@ class BlacklistSettingWidget(QWidget):
 class CloudSettingWidget(QWidget):
     """
     💡 [클라우드 설정 화면]
-    - 파일 받기 저장 경로 확인 및 [변경하기] 다이얼로그 연동 기능
-    - 서버에 저장된 실제 파일 용량 실시간 연동 및 삭제 시 자동 반영 기능
+    - 파일 받기 저장 경로를 QSettings(클라이언트단)에 저장 및 불러오기
     """
     def __init__(self, user_info: dict = None, net_client=None):
         super().__init__()
         self.user_info = user_info or {}
         self.net_client = net_client
-        self.user_email = self.user_info.get("email", "")
+        self.user_email = self.user_info.get("email", "user@example.com")
+        
+        # 💡 클라이언트단 로컬 저장을 위한 QSettings 초기화
+        self.settings = QSettings("YoungCloud", "ClientApp")
 
         # 전체 위젯 배경색 및 기본 폰트 설정
         self.setStyleSheet("background-color: #EFF7F4; font-family: 'Malgun Gothic', sans-serif;")
@@ -979,7 +986,6 @@ class CloudSettingWidget(QWidget):
         lbl_path_title.setFixedWidth(110)
         lbl_path_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #334155;")
 
-        # 저장 경로를 보여주는 텍스트 박스 (사용자가 직접 수정하지 못하도록 읽기 전용 설정)
         self.input_path = QLineEdit()
         self.input_path.setReadOnly(True)
         self.input_path.setStyleSheet("""
@@ -993,7 +999,6 @@ class CloudSettingWidget(QWidget):
             }
         """)
 
-        # 폴더 선택 다이얼로그를 띄우는 '변경하기' 버튼
         btn_change_path = QPushButton("변경하기")
         btn_change_path.setFixedSize(90, 38)
         btn_change_path.setCursor(Qt.PointingHandCursor)
@@ -1008,7 +1013,6 @@ class CloudSettingWidget(QWidget):
             }
             QPushButton:hover { background-color: #40D4DC; }
         """)
-        # 버튼 클릭 시 폴더 선택 다이얼로그 함수 연결
         btn_change_path.clicked.connect(self.open_folder_dialog)
 
         path_layout.addWidget(lbl_path_title)
@@ -1021,36 +1025,28 @@ class CloudSettingWidget(QWidget):
         self.storage_info_label.setStyleSheet("font-size: 14px; color: #475569; margin-top: 10px;")
         main_layout.addWidget(self.storage_info_label)
 
-        main_layout.addStretch()  # 아래 공간 채우기
+        main_layout.addStretch()
 
-        # 초기 데이터 불러오기 실행
         self.load_settings_data()
 
     def load_settings_data(self):
-        """서버로부터 사용자의 저장 경로와 실제 사용 중인 클라우드 용량을 불러옵니다."""
+        """로컬(QSettings)에서 저장 경로를 불러오고, 서버로부터 클라우드 용량을 조회합니다."""
+        # 1. 클라이언트단 QSettings에서 다운로드 경로 불러오기 (기본값: 사용자 다운로드 폴더)
+        default_download = os.path.join(os.path.expanduser("~"), "Downloads")
+        saved_path = self.settings.value(f"download_path_{self.user_email}", default_download)
+        self.input_path.setText(saved_path)
+
+        # 2. 클라우드 용량 정보 조회 요청 (서버 연동)
         if not self.net_client or not self.user_email:
-            # 네트워크가 없을 경우 기본값 세팅
-            default_download = os.path.join(os.path.expanduser("~"), "Downloads")
-            self.input_path.setText(default_download)
             self.storage_info_label.setText("클라우드 용량: 0 MB / 500 MB (일반 회원)")
             return
 
-        # 1. 파일 받기 저장 경로 조회 요청
-        res_path = self.net_client.get_user_download_path(self.user_email)
-        if res_path.get("status") == "success":
-            self.input_path.setText(res_path.get("download_path", ""))
-        else:
-            default_download = os.path.join(os.path.expanduser("~"), "Downloads")
-            self.input_path.setText(default_download)
-
-        # 2. 클라우드 용량 정보 조회 요청 (서버내 사용자 폴더 실사용량 반영)
         res_storage = self.net_client.get_user_storage_info(self.user_email)
         if res_storage.get("status") == "success":
             grade_name = res_storage.get("grade_name", "일반")
             max_bytes = res_storage.get("max_storage", 500 * 1024 * 1024)
             used_bytes = res_storage.get("total_used", 0)
 
-            # 바이트를 MB 단위로 보기 쉽게 변환
             used_mb = used_bytes / (1024 * 1024)
             max_mb = max_bytes / (1024 * 1024)
 
@@ -1060,24 +1056,17 @@ class CloudSettingWidget(QWidget):
             )
 
     def open_folder_dialog(self):
-        """변경하기 버튼을 누를 때 호출되는 폴더 선택 다이얼로그 창"""
-        # QFileDialog를 이용해 로컬 컴퓨터의 폴더를 선택할 수 있는 창을 띄웁니다.
+        """폴더 선택 후 QSettings에 로컬 경로 저장"""
         dir_path = QFileDialog.getExistingDirectory(
             self, 
             "파일 받기 저장 경로 선택", 
-            self.input_path.text()  # 기존에 설정된 경로를 기본으로 보여줌
+            self.input_path.text()
         )
 
-        # 사용자가 폴더를 선택하고 취소하지 않았을 경우
         if dir_path:
-            # 경로 구분자를 윈도우/리맥스 환경에 맞게 정돈
             normalized_path = os.path.normpath(dir_path)
             self.input_path.setText(normalized_path)
-
-            # 서버에 변경된 저장 경로 저장 요청
-            if self.net_client and self.user_email:
-                res = self.net_client.update_user_download_path(self.user_email, normalized_path)
-                if res.get("status") == "success":
-                    QMessageBox.information(self, "성공", "파일 받기 저장 경로가 성공적으로 변경되었습니다.")
-                else:
-                    QMessageBox.warning(self, "경고", "경로 변경 저장을 실패했습니다.")            
+            
+            # 💡 QSettings에 사용자별 다운로드 경로 저장
+            self.settings.setValue(f"download_path_{self.user_email}", normalized_path)
+            QMessageBox.information(self, "성공", "파일 받기 저장 경로가 성공적으로 변경되었습니다.")

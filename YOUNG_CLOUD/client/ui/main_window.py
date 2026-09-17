@@ -8,7 +8,7 @@ except ImportError:
     from cloud_window import CloudWindow, TrashWindow
 
 from network_client import NetworkClient
-from PySide6.QtCore import Qt, QSize
+from PySide6.QtCore import Qt, QSize, QTimer
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
@@ -152,6 +152,11 @@ class MainWindow(QMainWindow):
         for name, icon_filename, callback in menus:
             btn = QToolButton()
             btn.setText(name)
+            if name == "메시지":
+                self.message_btn = btn  # 메시지 버튼 따로 저장
+                
+            layout.addWidget(btn)
+            self.menu_buttons.append(btn)
 
             icon_path = os.path.join(self.base_path, "source", "image", icon_filename)
             btn.setIcon(QIcon(icon_path))
@@ -161,8 +166,14 @@ class MainWindow(QMainWindow):
             btn.setMinimumHeight(65)
             btn.clicked.connect(callback)
 
-            layout.addWidget(btn)
-            self.menu_buttons.append(btn)
+        # 💡 메시지 버튼 오른쪽 위에 띄울 알림 종(bell.png) 배지 라벨 생성
+        self.bell_badge = QLabel(self.sidebar)
+        bell_path = os.path.join(self.base_path, "source", "image", "bell.png")
+        if os.path.exists(bell_path):
+            pixmap = QPixmap(bell_path)
+            self.bell_badge.setPixmap(pixmap.scaled(20, 20, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        self.bell_badge.setFixedSize(20, 20)
+        self.bell_badge.hide()  # 초기에는 숨김 처리
 
         layout.addStretch()
 
@@ -182,6 +193,10 @@ class MainWindow(QMainWindow):
         layout.addWidget(logout_btn)
 
         parent_layout.addWidget(self.sidebar)
+        self.unread_timer = QTimer(self)
+        self.unread_timer.setInterval(5000)  # 5초
+        self.unread_timer.timeout.connect(self.check_unread_notification)
+        self.unread_timer.start()
 
     def logout(self):
         """로그아웃 처리: 로그인 창으로 이동"""
@@ -210,7 +225,6 @@ class MainWindow(QMainWindow):
         storage_layout.addWidget(self.storage_label)
         
 
-        # 💡 [핵심 수정] self.을 반드시 붙여야 클래스 전체에서 인식할 수 있습니다!
         self.storage_progress_bar = QProgressBar()
         self.storage_progress_bar.setValue(0)
         self.storage_progress_bar.setTextVisible(False)
@@ -233,7 +247,6 @@ class MainWindow(QMainWindow):
         # 서버로부터 사용자 용량 및 등급 정보를 불러와서 사이드바 UI 업데이트 실행
         self.load_and_update_storage_info()
         
-        # 💡 [추가] 용량 게이지와 서브메뉴 사이의 간격 및 가로선(구분선) 배치
         layout.addSpacing(4)
 
         line = QWidget()
@@ -346,7 +359,7 @@ class MainWindow(QMainWindow):
                 self.user_info["total_used"] = total_used_bytes
                 self.user_info["storage_percent"] = percent
 
-                # 💡 홈 메인 위젯이 생성되어 있다면 최신 사용자 정보로 동기화 갱신
+                # 홈 메인 위젯이 생성되어 있다면 최신 사용자 정보로 동기화 갱신
                 home_page = self.content_pages.get("홈 메인")
                 if home_page and hasattr(home_page, "update_user_info"):
                     home_page.update_user_info(self.user_info)
@@ -384,10 +397,8 @@ class MainWindow(QMainWindow):
         for name in all_menu_names:
             if name == "홈 메인":
                 self.content_pages[name] = HomeWidget(self.user_info)
-            # 💡 [클라우드] net_client 및 user_info 인자 전달
             elif name == "내 파일":
                 self.content_pages[name] = CloudWindow(net_client=self.net_client, user_info=self.user_info)
-            # 💡 [휴지통] TrashWindow 위젯 연결 및 인자 전달
             elif name == "휴지통":
                 self.content_pages[name] = TrashWindow(net_client=self.net_client, user_info=self.user_info)
             elif name == "달력보기":
@@ -398,12 +409,12 @@ class MainWindow(QMainWindow):
                                     user_email=user_email, 
                                     net_client=self.net_client
                                 )
-            elif name == "개인정보변경":  # 💡 개인정보변경 위젯 연결
+            elif name == "개인정보변경":
                 self.content_pages[name] = UserInfoSettingWidget(
                     user_info=self.user_info,
                     net_client=self.net_client
                 )    
-            elif name in ["받은메시지", "메시지함"]:  # 👈 메시지 위젯 연결
+            elif name in ["받은메시지", "메시지함"]:
                 self.content_pages[name] = MessageWidget(self.user_info)
             elif name == "보낸메시지":
                 self.content_pages[name] = SentMessageWidget(self.user_info)
@@ -427,8 +438,6 @@ class MainWindow(QMainWindow):
                 self.content_pages[name] = CloudSettingWidget(
                     user_info=self.user_info, net_client=self.net_client
                 )    
-                
-                
             else:
                 self.content_pages[name] = PlaceholderView(name)
 
@@ -464,10 +473,62 @@ class MainWindow(QMainWindow):
         self.path_label.setText(f"> {menu_text}")
         if menu_text in self.page_index_map:
             page_widget = self.content_pages[menu_text]
-            # 💡 [자동 갱신] 내 파일 또는 휴지통 이동 시 DB 최신 데이터 자동 조회
             if hasattr(page_widget, "load_file_list"):
                 page_widget.load_file_list()
             self.content_stack.setCurrentIndex(self.page_index_map[menu_text])
+            
+            
+    def check_unread_notification(self):
+        """5초마다 서버에 읽지 않은 메시지 개수를 확인하여 메시지 버튼 텍스트 및 편지 아이콘 위에 bell.png 배지를 겹쳐서 표시합니다."""
+        user_email = self.user_info.get("email")
+        if not user_email or not self.net_client:
+            return
+
+        # 서버에 읽지 않은 메시지 개수 요청
+        res = self.net_client.get_unread_message_count(user_email)
+        if res.get("status") == "success":
+            unread_count = res.get("unread_count", 0)
+            
+            if unread_count > 0:
+                # 읽지 않은 메시지가 있으면: 숫자 표시
+                self.message_btn.setText(f"메시지 ({unread_count})")
+                
+                # 💡 편지 아이콘(32x32)의 우측 상단에 종 아이콘이 살짝 겹치도록 좌표 계산
+                btn_pos = self.message_btn.pos()
+                btn_width = self.message_btn.width()
+                
+                # 버튼 중앙을 기준으로 편지 아이콘 우측 상단 위치 계산 (+ 숫자 조절 가능)
+                badge_x = btn_pos.x() + (btn_width // 2) + 2   # 우측으로 살짝 이동
+                badge_y = btn_pos.y() + 4                     # 상단으로 살짝 이동
+                
+                self.bell_badge.move(badge_x, badge_y)
+                self.bell_badge.raise_()  # 위로 끌어올려 겹치게 표시
+                self.bell_badge.show()
+            else:
+                # 읽지 않은 메시지가 없으면: 기본 텍스트 및 배지 숨김
+                self.message_btn.setText("메시지")
+                self.bell_badge.hide()
+                
+            # 버튼 기본 스타일 설정
+            self.message_btn.setStyleSheet("""
+                QToolButton {
+                    background-color: transparent;
+                    border: none;
+                    color: #333333;
+                    font-weight: bold;
+                    font-size: 12px;
+                }
+                QToolButton:hover {
+                    background-color: rgba(255, 255, 255, 0.2);
+                    border-radius: 5px;
+                }
+            """)    
+   
+    def closeEvent(self, event):
+        """창이 닫힐 때 타이머 안전 종료"""
+        if hasattr(self, 'unread_timer'):
+            self.unread_timer.stop()
+        super().closeEvent(event)        
 
 
 if __name__ == "__main__":

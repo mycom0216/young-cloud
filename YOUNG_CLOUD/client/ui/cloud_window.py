@@ -1,6 +1,6 @@
 import os
 import base64
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QSettings
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -179,6 +179,10 @@ class FileTransferDialog(QDialog):
         self.cloud_client = cloud_client
         self.files = files or []
         self.folder_id = folder_id
+        
+        # 💡 클라이언트단 설정 조회를 위한 QSettings 초기화
+        self.settings = QSettings("YoungCloud", "ClientApp")
+        self.user_email = self.cloud_client.user_email
 
         self.setWindowTitle(title)
         self.resize(420, 450)
@@ -226,7 +230,11 @@ class FileTransferDialog(QDialog):
             select_label = QLabel("받을 폴더 선택")
             self.path_edit = QLineEdit()
             self.path_edit.setReadOnly(True)
-            self.path_edit.setPlaceholderText("다운로드할 저장 폴더를 선택하세요")
+            
+            # 💡 [핵심] 설정에 저장된 다운로드 경로 불러와서 기본 적용
+            default_download = os.path.join(os.path.expanduser("~"), "Downloads")
+            saved_download_path = self.settings.value(f"download_path_{self.user_email}", default_download)
+            self.path_edit.setText(saved_download_path)
 
             select_button = QPushButton("폴더선택")
             select_button.clicked.connect(self.select_download_folder)

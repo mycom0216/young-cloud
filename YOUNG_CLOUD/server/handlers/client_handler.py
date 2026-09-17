@@ -785,7 +785,31 @@ class ClientHandler(threading.Thread):
                             "max_storage": max_storage,
                             "total_used": total_size_bytes  # 사용자가 파일을 지우면 os.walk를 통해 자동으로 용량이 줄어듦
                         }                    
-
+                # ===========================================
+                # 💡 읽지 않은 메시지 알림표시
+                # ===========================================
+                elif action == "get_unread_message_count":
+                    email = data.get("email")
+                    cursor.execute("SELECT USER_ID FROM USER WHERE EMAIL = %s", (email,))
+                    user_row = cursor.fetchone()
+                    if not user_row:
+                        response = {"status": "fail", "message": "사용자 정보를 찾을 수 없습니다."}
+                    else:
+                        my_user_id = user_row['USER_ID']
+                        # 내가 받은 메시지 중 안 읽었으며, 차단하지 않은 사용자의 메시지 개수 조회
+                        sql = """
+                            SELECT COUNT(*) as UNREAD_COUNT
+                            FROM MESSAGE m
+                            WHERE m.RECEIVER_ID = %s 
+                            AND m.IS_READ = 0
+                            AND m.SENDER_ID NOT IN (
+                                SELECT BLOCKED_USER_ID FROM BLACKLIST WHERE USER_ID = %s
+                            )
+                        """
+                        cursor.execute(sql, (my_user_id, my_user_id))
+                        row = cursor.fetchone()
+                        unread_count = row['UNREAD_COUNT'] if row else 0
+                        response = {"status": "success", "unread_count": unread_count}
 
             except Exception as e:
                 response = {"status": "error", "message": f"데이터베이스 오류: {str(e)}"}
