@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
 
 from dialog.home_widget import HomeWidget
 from dialog.home_widget import CalenderWidget
-from settings_window import ServiceSettingWidget, UserInfoSettingWidget
+from settings_window import ServiceSettingWidget, UserInfoSettingWidget, DefaultMessageSettingWidget, OutroMessageSettingWidget
 from message_window import MessageWidget, MessageDialog, SentMessageWidget
 from admin_window import AdminServiceWidget
 
@@ -403,7 +403,15 @@ class MainWindow(QMainWindow):
             elif name == "보낸메시지":
                 self.content_pages[name] = SentMessageWidget(self.user_info)
             elif name == "서비스제한":
-                self.content_pages[name] = AdminServiceWidget(net_client=self.net_client)    
+                self.content_pages[name] = AdminServiceWidget(net_client=self.net_client)  
+            elif name == "기본메시지 설정":
+                self.content_pages[name] = DefaultMessageSettingWidget(
+                    user_info=self.user_info, net_client=self.net_client
+                )
+            elif name == "마무리메시지 설정":
+                self.content_pages[name] = OutroMessageSettingWidget(
+                    user_info=self.user_info, net_client=self.net_client
+                )      
             else:
                 self.content_pages[name] = PlaceholderView(name)
 

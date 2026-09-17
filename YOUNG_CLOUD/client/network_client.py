@@ -171,6 +171,21 @@ class NetworkClient:
         return self.send_request("get_user_storage_info", {"email": email})
 
 
+    # ==========================================
+    # 💡 [설정] 기본/마무리 메시지 관련 통신 함수
+    # ==========================================
+    def get_user_messages_config(self, email):
+        """서버로 사용자의 기본 메시지 및 마무리 메시지 조회를 요청합니다."""
+        return self.send_request("get_user_messages_config", {"email": email})
+
+    def update_user_messages_config(self, email, default_message, outro_message):
+        """서버로 사용자의 기본 메시지 및 마무리 메시지 수정을 요청합니다."""
+        return self.send_request("update_user_messages_config", {
+            "email": email,
+            "default_message": default_message,
+            "outro_message": outro_message
+        })
+
 
 
 

@@ -472,6 +472,39 @@ class ClientHandler(threading.Thread):
                         status_text = "차단" if is_banned else "차단 해제"
                         response = {"status": "success", "message": f"해당 사용자가 성공적으로 {status_text}되었습니다."}
 
+
+                # ===========================================
+                # 💡 [설정] 기본/마무리 메시지 설정 처리
+                # ===========================================
+                elif action == "get_user_messages_config":
+                    email = data.get("email")
+                    sql = "SELECT DEFAULT_MSG_HEADER, DEFAULT_MSG_FOOTER FROM USER WHERE EMAIL = %s"
+                    cursor.execute(sql, (email,))
+                    row = cursor.fetchone()
+                    if row:
+                        response = {
+                            "status": "success",
+                            "default_message": row.get('DEFAULT_MSG_HEADER', ''),
+                            "outro_message": row.get('DEFAULT_MSG_FOOTER', '')
+                        }
+                    else:
+                        response = {"status": "fail", "message": "사용자 정보를 찾을 수 없습니다."}
+
+                elif action == "update_user_messages_config":
+                    email = data.get("email")
+                    default_message = data.get("default_message", "")
+                    outro_message = data.get("outro_message", "")
+                    
+                    sql = "UPDATE USER SET DEFAULT_MSG_HEADER = %s, DEFAULT_MSG_FOOTER = %s WHERE EMAIL = %s"
+                    cursor.execute(sql, (default_message, outro_message, email))
+                    conn.commit()
+                    response = {"status": "success", "message": "메시지 설정이 저장되었습니다."}
+
+
+
+
+
+
             except Exception as e:
                 response = {"status": "error", "message": f"데이터베이스 오류: {str(e)}"}
             finally:
