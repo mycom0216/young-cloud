@@ -6,6 +6,7 @@ import yagmail
 import hashlib
 import os
 import base64
+import struct  # 💡 4바이트 길이 헤더 처리를 위해 추가
 from datetime import datetime, date
 
 # 서버 측 클라우드 저장소 기본 디렉토리 설정 (cloud_storage)
@@ -19,29 +20,42 @@ class ClientHandler(threading.Thread):
         self.client_sock = client_sock
         self.client_addr = client_addr
         self.db_lock = db_lock
+        
+    def _recv_all(self, n):
+        """지정한 n 바이트를 모두 수신할 때까지 반복 수신하는 Helper 함수"""
+        data = bytearray()
+        while len(data) < n:
+            packet = self.client_sock.recv(n - len(data))
+            if not packet:
+                return None
+            data.extend(packet)
+        return bytes(data)
 
     def run(self):
         try:
             while True:
-                # 바이트 버퍼로 수신하여 한글/대용량 데이터 분할 수신 안전성 확보
-                raw_buffer = b""
-                while True:
-                    chunk = self.client_sock.recv(4096)
-                    if not chunk:
-                        break
-                    raw_buffer += chunk
-                    try:
-                        # 완벽한 JSON 형태가 수신될 때까지 디코딩 및 파싱 시도
-                        request = json.loads(raw_buffer.decode('utf-8'))
-                        break
-                    except (json.JSONDecodeError, UnicodeDecodeError):
-                        continue  
-
-                if not raw_buffer:
+                # 1. 클라이언트 요청의 4바이트 길이 헤더 수신
+                raw_length = self._recv_all(4)
+                if not raw_length:
                     break
 
+                data_length = struct.unpack('>I', raw_length)[0]
+
+                # 2. 지정된 데이터 길이만큼 요청 바디 완벽 수신
+                body_bytes = self._recv_all(data_length)
+                if not body_bytes:
+                    break
+
+                request = json.loads(body_bytes.decode('utf-8'))
+
+                # 3. 비즈니스 로직 처리
                 response = self.route_request(request)
-                self.client_sock.sendall(json.dumps(response, default=str).encode('utf-8'))
+
+                # 4. 클라이언트로 응답 전송 (4바이트 길이 헤더 + JSON 응답 바디)
+                response_bytes = json.dumps(response, default=str).encode('utf-8')
+                header = struct.pack('>I', len(response_bytes))
+                self.client_sock.sendall(header + response_bytes)
+
         except Exception as e:
             print(f"[에러 발생] 클라이언트 통신 오류: {e}")
         finally:

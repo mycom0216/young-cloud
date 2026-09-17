@@ -267,19 +267,32 @@ class FileTransferDialog(QDialog):
             self.load_download_files()
 
     def select_files(self):
+        """파일 찾기 시 기존 선택된 목록을 유지하며 새 파일들을 누적(Append)합니다."""
         file_paths, _ = QFileDialog.getOpenFileNames(
             self, "업로드할 파일 선택", "", "모든 파일 (*.*)"
         )
         if not file_paths:
             return
 
-        self.files = file_paths
-        first_file_name = os.path.basename(file_paths[0])
-        if len(file_paths) == 1:
+        # 중복 없는 새 파일만 self.files에 추가
+        added_count = 0
+        for path in file_paths:
+            if path not in self.files:
+                self.files.append(path)
+                added_count += 1
+
+        if added_count == 0:
+            QMessageBox.information(self, "알림", "이미 목록에 추가된 파일입니다.")
+            return
+
+        # 경로 표시 줄 업데이트
+        first_file_name = os.path.basename(self.files[0])
+        if len(self.files) == 1:
             self.path_edit.setText(first_file_name)
         else:
-            self.path_edit.setText(f"{first_file_name} 외 {len(file_paths) - 1}개")
+            self.path_edit.setText(f"{first_file_name} 외 {len(self.files) - 1}개")
 
+        # UI 테이블 새로고침
         self.load_upload_files()
 
     def select_download_folder(self):
