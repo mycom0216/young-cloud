@@ -195,7 +195,8 @@ class NetworkClient:
 
     def get_user_storage_info(self, email):
         """서버로 사용자의 클라우드 사용량 및 등급 정보 조회를 요청합니다."""
-        return self.send_request("get_user_storage_info", {"email": email})
+
+        return self.send_request("cloud_storage_info", {"email": email})
 
 
     # ==========================================
@@ -249,7 +250,11 @@ class NetworkClient:
             "download_path": download_path
         })    
         
-
+     
+    def get_unread_message_count(self, email):
+        """서버로 읽지 않은 메시지 개수 조회를 요청합니다."""
+        return self.send_request("get_unread_message_count", {"email": email})
+    
 # ==========================================
 # 💡 [호환성 유지 함수] login_window.py 대응
 # ==========================================
