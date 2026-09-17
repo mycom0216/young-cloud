@@ -403,9 +403,17 @@ class MainWindow(QMainWindow):
             if name == "홈 메인":
                 self.content_pages[name] = HomeWidget(self.user_info)
             elif name == "내 파일":
-                self.content_pages[name] = CloudWindow(net_client=self.net_client, user_info=self.user_info)
+                cloud_widget = CloudWindow(net_client=self.net_client, user_info=self.user_info)
+                # 🔥 업로드/완전삭제 발생 시 사이드바 용량 자동 갱신 연결
+                if hasattr(cloud_widget, 'storage_updated'):
+                    cloud_widget.storage_updated.connect(self.load_and_update_storage_info)
+                self.content_pages[name] = cloud_widget
             elif name == "휴지통":
-                self.content_pages[name] = TrashWindow(net_client=self.net_client, user_info=self.user_info)
+                trash_widget = TrashWindow(net_client=self.net_client, user_info=self.user_info)
+                # 🔥 휴지통 완전 삭제 발생 시 사이드바 용량 자동 갱신 연결
+                if hasattr(trash_widget, 'storage_updated'):
+                    trash_widget.storage_updated.connect(self.load_and_update_storage_info)
+                self.content_pages[name] = trash_widget
             elif name == "달력보기":
                 self.content_pages[name] = CalenderWidget()
             elif name == "서비스 확인 및 변경":
