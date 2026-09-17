@@ -187,7 +187,27 @@ class NetworkClient:
         })
 
 
+    # ==========================================
+    # 💡 [설정] 블랙리스트 관리 관련 통신 함수
+    # ==========================================
+    def search_users_for_blacklist(self, owner_email, keyword):
+        """서버로 블랙리스트 검색을 위한 사용자 조회 및 차단 여부 확인을 요청합니다."""
+        return self.send_request("search_users_for_blacklist", {
+            "owner_email": owner_email,
+            "keyword": keyword
+        })
 
+    def update_blacklist_status(self, owner_email, target_email, is_block):
+        """서버로 특정 사용자의 블랙리스트 차단 등록 또는 해제를 요청합니다."""
+        return self.send_request("update_blacklist_status", {
+            "owner_email": owner_email,
+            "target_email": target_email,
+            "is_block": is_block
+        })    
+
+    def get_blocked_users_list(self, owner_email):
+            """서버로 내가 차단한 유저 목록 조회를 요청합니다."""
+            return self.send_request("get_blocked_users_list", {"owner_email": owner_email})
 
 # ==========================================
 # 💡 [호환성 유지 함수] login_window.py 대응

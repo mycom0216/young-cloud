@@ -1,8 +1,9 @@
 # settings_window.py
 import re
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-    QPushButton, QFrame, QMessageBox, QLineEdit
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QDialog,
+    QPushButton, QFrame, QMessageBox, QLineEdit, 
+    QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView
 )
 from PySide6.QtCore import Qt
 
@@ -73,19 +74,19 @@ class UserInfoSettingWidget(QWidget):
     def init_header(self, parent_layout):
         header_layout = QVBoxLayout()
         header_layout.setSpacing(12)
+        header_layout.setContentsMargins(50, 0, 0, 0)
       
         self.grade_label = QLabel(f"등급 :    {self.user_grade}")
         self.grade_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #1E293B;")
 
         header_layout.addWidget(self.grade_label)
-
         parent_layout.addLayout(header_layout)
-        parent_layout.addSpacing(50)
+        parent_layout.addSpacing(40)
 
     def init_form_inputs(self, parent_layout):
         form_layout = QVBoxLayout()
         form_layout.setSpacing(25)
-        form_layout.setAlignment(Qt.AlignCenter)
+        form_layout.setAlignment(Qt.AlignLeft)
 
         label_style = "font-size: 15px; font-weight: bold; color: #1E293B;"
         input_style = """
@@ -126,10 +127,8 @@ class UserInfoSettingWidget(QWidget):
         self.input_id.setEnabled(False)
         self.input_id.setStyleSheet(input_style)
 
-        id_box.addStretch()
         id_box.addWidget(lbl_id)
         id_box.addWidget(self.input_id)
-        id_box.addSpacing(75)
         id_box.addStretch()
 
         # 2) 이름
@@ -151,7 +150,6 @@ class UserInfoSettingWidget(QWidget):
         btn_name_chk.setStyleSheet(btn_style)
         btn_name_chk.clicked.connect(self.check_name)
 
-        name_box.addStretch()
         name_box.addWidget(lbl_name)
         name_box.addWidget(self.input_name)
         name_box.addWidget(btn_name_chk)
@@ -181,7 +179,6 @@ class UserInfoSettingWidget(QWidget):
         lbl_pw_guide = QLabel("영문,숫자,특수문자 포함 조합 8-20자")
         lbl_pw_guide.setStyleSheet("font-size: 13px; color: #64748B;")
 
-        pw_box.addStretch()
         pw_box.addWidget(lbl_pw)
         pw_box.addWidget(self.input_pw)
         pw_box.addWidget(btn_pw_chk)
@@ -191,7 +188,13 @@ class UserInfoSettingWidget(QWidget):
         form_layout.addLayout(id_box)
         form_layout.addLayout(name_box)
         form_layout.addLayout(pw_box)
-        parent_layout.addLayout(form_layout)
+
+        container_widget = QWidget()
+        container_layout = QVBoxLayout(container_widget)
+        container_layout.setContentsMargins(50, 0, 0, 0)
+        container_layout.addLayout(form_layout)
+
+        parent_layout.addWidget(container_widget)
         parent_layout.addStretch()
 
     def init_bottom_button(self, parent_layout):
@@ -301,7 +304,7 @@ class ServiceSettingWidget(QWidget):
         header_layout = QVBoxLayout()
         header_layout.setSpacing(12)
         self.current_tier_label = QLabel(f"현재 이용중인 등급 : {self.current_tier}")
-        self.current_tier_label.setStyleSheet("font-size: 14px; font-weight: bold; color: black;;")
+        self.current_tier_label.setStyleSheet("font-size: 14px; font-weight: bold; color: black;")
         header_layout.addWidget(self.current_tier_label)
         parent_layout.addLayout(header_layout)
         parent_layout.addSpacing(60)
@@ -444,14 +447,13 @@ class DefaultMessageSettingWidget(QWidget):
         layout.setContentsMargins(40, 30, 40, 30)
         layout.setSpacing(15)
 
-
         desc_label = QLabel("메시지 보내기 시 자동으로 채워질 기본(상단) 메시지를 입력하세요.")
         desc_label.setStyleSheet("font-size: 14px; color: #475569;")
         layout.addWidget(desc_label)
 
         self.input_message = QLineEdit()
         self.input_message.setFixedHeight(100)
-        self.input_message.setMaxLength(255)  # 💡 데이터 정의서 VARCHAR(255) 제한 반영
+        self.input_message.setMaxLength(255)
         self.input_message.setAlignment(Qt.AlignTop | Qt.AlignLeft)
         self.input_message.setStyleSheet("""
             QLineEdit { background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 6px; padding: 10px; font-size: 14px; }
@@ -495,7 +497,7 @@ class DefaultMessageSettingWidget(QWidget):
 
 
 class OutroMessageSettingWidget(QWidget):
-    """[마무리 메시지 설정 화면 - ]"""
+    """[마무리 메시지 설정 화면]"""
     def __init__(self, settings_client: SettingsClient = None, user_info: dict = None, net_client=None):
         super().__init__()
         self.settings_client = settings_client or SettingsClient(net_client=net_client)
@@ -514,8 +516,7 @@ class OutroMessageSettingWidget(QWidget):
 
         self.input_message = QLineEdit()
         self.input_message.setFixedHeight(100)
-        self.input_message.setMaxLength(255)  # 💡 데이터 정의서 VARCHAR(255) 제한 반영
-        
+        self.input_message.setMaxLength(255)
         self.input_message.setStyleSheet("""
             QLineEdit { background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 6px; padding: 10px; font-size: 14px; }
         """)
@@ -555,3 +556,362 @@ class OutroMessageSettingWidget(QWidget):
                 QMessageBox.information(self, "성공", "마무리 메시지가 성공적으로 저장되었습니다.")
             else:
                 QMessageBox.warning(self, "실패", "저장 중 오류가 발생했습니다.")
+
+
+class UserBlacklistDialog(QDialog):
+    """[특정 유저 차단/해제 다이얼로그 클래스]"""
+    def __init__(self, target_email, is_blocked, current_user_email, net_client):
+        super().__init__()
+        self.target_email = target_email
+        self.is_blocked = is_blocked
+        self.current_user_email = current_user_email
+        self.net_client = net_client
+        self.init_dialog_ui()
+
+    def init_dialog_ui(self):
+        self.setWindowTitle("블랙리스트 설정")
+        self.resize(400, 250)
+        self.setStyleSheet("background-color: #FFFFFF; font-family: 'Malgun Gothic', sans-serif;")
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(30, 30, 30, 30)
+        layout.setSpacing(15)
+
+        title_label = QLabel("블랙리스트 설정")
+        title_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #1E293B;")
+        layout.addWidget(title_label)
+
+        self.label_target = QLabel(f"대상 이용자 : {self.target_email}")
+        self.label_target.setStyleSheet("font-size: 14px; color: #333333;")
+        layout.addWidget(self.label_target)
+
+        self.info_input = QLineEdit()
+        self.info_input.setText(f"현재 상태: {'차단됨' if self.is_blocked else '정상 이용 중'}")
+        self.info_input.setReadOnly(True)
+        self.info_input.setStyleSheet("background-color: #F1F5F9; border: 1px solid #CBD5E1; border-radius: 6px; padding: 8px; font-size: 13px; color: #64748B;")
+        layout.addWidget(self.info_input)
+
+        layout.addSpacing(10)
+
+        btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(10)
+
+        self.action_btn = QPushButton()
+        self.action_btn.setFixedHeight(40)
+        self.action_btn.setCursor(Qt.PointingHandCursor)
+        
+        if self.is_blocked:
+            self.action_btn.setText("차단해제하기")
+            self.action_btn.setStyleSheet("background-color: #EF4444; color: white; font-weight: bold; border-radius: 6px; border: none;")
+        else:
+            self.action_btn.setText("차단하기")
+            self.action_btn.setStyleSheet("background-color: #55E6ED; color: #000000; font-weight: bold; border-radius: 6px; border: none;")
+        
+        self.action_btn.clicked.connect(self.on_blacklist_action_clicked)
+
+        close_btn = QPushButton("닫기")
+        close_btn.setFixedHeight(40)
+        close_btn.setCursor(Qt.PointingHandCursor)
+        close_btn.setStyleSheet("background-color: #E2E8F0; color: #333333; font-weight: bold; border-radius: 6px; border: none;")
+        close_btn.clicked.connect(self.close)
+
+        btn_layout.addWidget(self.action_btn)
+        btn_layout.addWidget(close_btn)
+        layout.addLayout(btn_layout)
+
+    def on_blacklist_action_clicked(self):
+        msg = f"\"{self.target_email}\"님을 정말로 차단 해제하시겠습니까?" if self.is_blocked else f"\"{self.target_email}\"님을 정말로 블랙리스트에 차단하시겠습니까?"
+        new_status = not self.is_blocked
+
+        reply = QMessageBox.question(self, "상태 변경 확인", msg, QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if reply == QMessageBox.Yes:
+            if self.net_client:
+                res = self.net_client.update_blacklist_status(
+                    owner_email=self.current_user_email,
+                    target_email=self.target_email,
+                    is_block=new_status
+                )
+                if res.get("status") == "success":
+                    QMessageBox.information(self, "성공", res.get("message", "처리가 완료되었습니다."))
+                    self.accept()
+                else:
+                    QMessageBox.warning(self, "실패", res.get("message", "요청 처리에 실패했습니다."))
+            else:
+                QMessageBox.information(self, "성공", "처리 완료 (테스트 모드)")
+                self.accept()
+
+
+class BlockedUsersListDialog(QDialog):
+    """
+    [💡 신규 구현] '블랙리스트 목록_목업.png' 디자인을 반영한 차단 목록 관리 다이얼로그
+    """
+    def __init__(self, current_user_email, net_client):
+        super().__init__()
+        self.current_user_email = current_user_email
+        self.net_client = net_client
+        self.init_ui()
+        self.load_blocked_users()
+
+    def init_ui(self):
+        self.setWindowTitle("블랙리스트 목록")
+        self.resize(500, 450)
+        self.setStyleSheet("background-color: #EFF7F4; font-family: 'Malgun Gothic', sans-serif;")
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(25, 25, 25, 25)
+        layout.setSpacing(15)
+
+        # 상단 타이틀
+        title_label = QLabel("블랙리스트 목록")
+        title_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #1E293B;")
+        layout.addWidget(title_label)
+
+        # 구분선
+        line = QFrame()
+        line.setFixedHeight(1)
+        line.setStyleSheet("background-color: #CBD5E1;")
+        layout.addWidget(line)
+
+        # 상단 우측 '차단 해제' 버튼
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        
+        self.unblock_btn = QPushButton("차단 해제")
+        self.unblock_btn.setFixedSize(90, 32)
+        self.unblock_btn.setCursor(Qt.PointingHandCursor)
+        self.unblock_btn.setStyleSheet("""
+            QPushButton { background-color: #55E6ED; color: #000000; font-weight: bold; border-radius: 4px; border: none; font-size: 12px; }
+            QPushButton:hover { background-color: #40D4DC; }
+        """)
+        self.unblock_btn.clicked.connect(self.on_unblock_clicked)
+        btn_layout.addWidget(self.unblock_btn)
+        layout.addLayout(btn_layout)
+
+        # 테이블 위젯 (아이디, 이름, 차단일)
+        self.table = QTableWidget()
+        self.table.setColumnCount(3)
+        self.table.setHorizontalHeaderLabels(["아이디", "이름", "차단일"])
+        self.table.verticalHeader().setVisible(False)
+        self.table.setStyleSheet("""
+            QTableWidget { background-color: #FFFFFF; border: 1px solid #D0D8D2; gridline-color: #EFEFEF; font-size: 9pt; }
+            QHeaderView::section { background-color: #EFF8F1; padding: 6px; border: none; font-weight: bold; font-size: 9pt; color: #333; }
+        """)
+
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.Interactive)
+        self.table.setColumnWidth(1, 120)
+        header.setSectionResizeMode(2, QHeaderView.Interactive)
+        self.table.setColumnWidth(2, 140)
+
+        self.table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
+        layout.addWidget(self.table)
+
+        # 하단 닫기 버튼
+        bottom_layout = QHBoxLayout()
+        bottom_layout.addStretch()
+        
+        close_btn = QPushButton("닫기")
+        close_btn.setFixedSize(80, 35)
+        close_btn.setCursor(Qt.PointingHandCursor)
+        close_btn.setStyleSheet("""
+            QPushButton { background-color: #55E6ED; color: #000000; font-weight: bold; border-radius: 4px; border: none; font-size: 12px; }
+            QPushButton:hover { background-color: #40D4DC; }
+        """)
+        close_btn.clicked.connect(self.close)
+        bottom_layout.addWidget(close_btn)
+        layout.addLayout(bottom_layout)
+
+    def load_blocked_users(self):
+        """서버에서 내가 차단한 유저 목록 조회"""
+        if self.net_client:
+            res = self.net_client.get_blocked_users_list(self.current_user_email)
+            if res.get("status") == "success":
+                self.update_table(res.get("users", []))
+            else:
+                self.update_table([])
+        else:
+            # 테스트용 더미 데이터
+            self.update_table([{"EMAIL": "test@example.com", "NAME": "홍길동", "CREATED_AT": "2026-09-17 12:00:00"}])
+
+    def update_table(self, users):
+        self.table.setRowCount(len(users))
+        for row, user in enumerate(users):
+            self.table.setItem(row, 0, QTableWidgetItem(str(user.get("EMAIL", ""))))
+            self.table.setItem(row, 1, QTableWidgetItem(str(user.get("NAME", ""))))
+            self.table.setItem(row, 2, QTableWidgetItem(str(user.get("CREATED_AT", ""))))
+
+    def on_unblock_clicked(self):
+        selected_row = self.table.currentRow()
+        if selected_row < 0:
+            QMessageBox.warning(self, "안내", "차단 해제할 사용자를 선택해주세요.")
+            return
+
+        target_email = self.table.item(selected_row, 0).text()
+        reply = QMessageBox.question(self, "차단 해제 확인", f"\"{target_email}\"님을 차단 해제하시겠습니까?", QMessageBox.Yes | QMessageBox.No)
+        
+        if reply == QMessageBox.Yes:
+            if self.net_client:
+                res = self.net_client.update_blacklist_status(
+                    owner_email=self.current_user_email,
+                    target_email=target_email,
+                    is_block=False
+                )
+                if res.get("status") == "success":
+                    QMessageBox.information(self, "성공", "차단이 해제되었습니다.")
+                    self.load_blocked_users()
+                else:
+                    QMessageBox.warning(self, "실패", res.get("message", "요청 처리 실패"))
+
+
+class BlacklistSettingWidget(QWidget):
+    """
+    [설정 - 블랙리스트 설정 화면 메인 위젯]
+    - '차단 목록' 버튼 추가 및 공백 검색 시 초기화 기능 반영
+    """
+    def __init__(self, settings_client=None, user_info=None, net_client=None):
+        super().__init__()
+        self.settings_client = settings_client
+        self.user_info = user_info or {}
+        self.user_email = self.user_info.get("email", "user@example.com")
+        self.net_client = net_client
+        
+        self.user_list = []
+
+        self.setStyleSheet("background-color: #EFF7F4; font-family: 'Malgun Gothic', sans-serif;")
+        
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(40, 30, 40, 30)
+        main_layout.setSpacing(15)
+
+        # 1. 상단 검색 영역 및 '차단목록' 버튼 배치
+        top_layout = QHBoxLayout()
+        top_layout.setSpacing(10)
+
+        search_label = QLabel("아이디 검색")
+        search_label.setStyleSheet("background-color: #EFF8F1; font-size: 12px; font-weight: bold; color: #333; padding: 4px;")
+        top_layout.addWidget(search_label)
+
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("검색할 아이디를 입력하세요...")
+        self.search_input.setFixedHeight(30)
+        self.search_input.setStyleSheet("background-color: #FFFFFF; border: 1px solid #D0D8D2; border-radius: 4px; padding-left: 5px; font-size: 11px;")
+        
+        # 💡 [핵심 요구사항] 검색어 변경 시 감지하여 공백이 되면 자동으로 목록을 초기화
+        self.search_input.textChanged.connect(self.on_search_text_changed)
+        self.search_input.returnPressed.connect(self.search_users)
+        top_layout.addWidget(self.search_input)
+
+        self.search_btn = QPushButton("검색")
+        self.search_btn.setFixedSize(50, 30)
+        self.search_btn.setCursor(Qt.PointingHandCursor)
+        self.search_btn.setStyleSheet("background-color: #63F2F2; color: #333; font-weight: bold; border-radius: 4px; border: none;")
+        self.search_btn.clicked.connect(self.search_users)
+        top_layout.addWidget(self.search_btn)
+
+        top_layout.addStretch()
+
+        # 💡 [핵심 요구사항 1] '차단 목록' 버튼 추가 (목업 이미지 반영)
+        self.blocked_list_btn = QPushButton("차단 목록")
+        self.blocked_list_btn.setFixedSize(90, 30)
+        self.blocked_list_btn.setCursor(Qt.PointingHandCursor)
+        self.blocked_list_btn.setStyleSheet("background-color: #55E6ED; color: #000000; font-weight: bold; border-radius: 4px; border: none; font-size: 11px;")
+        self.blocked_list_btn.clicked.connect(self.open_blocked_list_dialog)
+        top_layout.addWidget(self.blocked_list_btn)
+
+        main_layout.addLayout(top_layout)
+
+        # 2. 테이블 위젯 설정
+        self.table = QTableWidget()
+        self.table.setColumnCount(3)
+        self.table.setHorizontalHeaderLabels(["아이디", "이름", "차단 상태"])
+        self.table.verticalHeader().setVisible(False)
+        self.table.setStyleSheet("""
+            QTableWidget { background-color: #FFFFFF; border: 1px solid #D0D8D2; gridline-color: #EFEFEF; font-size: 9pt; }
+            QHeaderView::section { background-color: #EFF8F1; padding: 6px; border: none; font-weight: bold; font-size: 9pt; color: #333; }
+        """)
+
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.Interactive)
+        self.table.setColumnWidth(1, 150)
+        header.setSectionResizeMode(2, QHeaderView.Interactive)
+        self.table.setColumnWidth(2, 120)
+
+        self.table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.table.cellClicked.connect(self.on_row_clicked)
+
+        main_layout.addWidget(self.table)
+        self.update_table_view([])
+
+    def on_search_text_changed(self):
+        """검색창이 공백이 되면 테이블을 즉시 초기화합니다."""
+        if not self.search_input.text().strip():
+            self.user_list = []
+            self.update_table_view([])
+
+    def search_users(self):
+        keyword = self.search_input.text().strip()
+        if not keyword:
+            self.user_list = []
+            self.update_table_view([])
+            return
+
+        if self.net_client:
+            res = self.net_client.search_users_for_blacklist(self.user_email, keyword)
+            if res.get("status") == "success":
+                self.user_list = res.get("users", [])
+                self.update_table_view(self.user_list)
+            else:
+                QMessageBox.warning(self, "조회 실패", res.get("message", "사용자 검색에 실패했습니다."))
+        else:
+            self.user_list = [{"EMAIL": keyword, "NAME": "테스트유저", "IS_BLOCKED": False}]
+            self.update_table_view(self.user_list)
+
+    def update_table_view(self, users_to_display):
+        self.table.setRowCount(len(users_to_display))
+        for row, user in enumerate(users_to_display):
+            email = user.get("EMAIL", "")
+            name = user.get("NAME", "")
+            is_blocked = bool(user.get("IS_BLOCKED", False))
+
+            status_str = "차단" if is_blocked else "정상"
+
+            item_email = QTableWidgetItem(str(email))
+            item_name = QTableWidgetItem(str(name))
+            item_status = QTableWidgetItem(str(status_str))
+
+            if is_blocked:
+                item_status.setForeground(Qt.red)
+            else:
+                item_status.setForeground(Qt.darkGreen)
+
+            self.table.setItem(row, 0, item_email)
+            self.table.setItem(row, 1, item_name)
+            self.table.setItem(row, 2, item_status)
+
+    def on_row_clicked(self, row, column):
+        email_item = self.table.item(row, 0)
+        status_item = self.table.item(row, 2)
+        if not email_item:
+            return
+
+        target_email = email_item.text()
+        if target_email == self.user_email:
+            QMessageBox.information(self, "안내", "본인은 블랙리스트에 등록할 수 없습니다.")
+            return
+
+        is_blocked = (status_item.text() == "차단")
+        dialog = UserBlacklistDialog(target_email, is_blocked, self.user_email, self.net_client)
+        if dialog.exec() == QDialog.Accepted:
+            self.search_users()
+
+    def open_blocked_list_dialog(self):
+        """'차단 목록' 버튼 클릭 시 모달 다이얼로그 팝업 오픈"""
+        dialog = BlockedUsersListDialog(self.user_email, self.net_client)
+        dialog.exec()
+        # 다이얼로그가 닫히면 현재 검색 결과 새로고침
+        if self.search_input.text().strip():
+            self.search_users()

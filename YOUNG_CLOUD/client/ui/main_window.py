@@ -412,6 +412,11 @@ class MainWindow(QMainWindow):
                 self.content_pages[name] = OutroMessageSettingWidget(
                     user_info=self.user_info, net_client=self.net_client
                 )      
+            elif name == "블랙리스트 설정":
+                from settings_window import BlacklistSettingWidget
+                self.content_pages[name] = BlacklistSettingWidget(
+                    user_info=self.user_info, net_client=self.net_client
+                )    
             else:
                 self.content_pages[name] = PlaceholderView(name)
 

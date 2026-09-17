@@ -151,26 +151,6 @@ class ClientHandler(threading.Thread):
                 # ===========================================
                 # 4. 메시지 기능 처리
                 # ===========================================
-                elif action == "message_received":
-                    email = data.get("email")
-                    cursor.execute("SELECT USER_ID FROM USER WHERE EMAIL = %s", (email,))
-                    user_row = cursor.fetchone()
-                    if not user_row:
-                        return {"status": "fail", "message": "사용자 정보를 찾을 수 없습니다."}
-                    
-                    sql = """
-                        SELECT m.MESSAGE_ID, u.EMAIL as SENDER_EMAIL, m.CONTENT, m.IS_READ, m.CREATED_AT
-                        FROM MESSAGE m
-                        JOIN USER u ON m.SENDER_ID = u.USER_ID
-                        WHERE m.RECEIVER_ID = %s
-                        ORDER BY m.CREATED_AT DESC
-                    """
-                    cursor.execute(sql, (user_row['USER_ID'],))
-                    messages = cursor.fetchall()
-                    for msg in messages:
-                        if msg.get('CREATED_AT'):
-                            msg['CREATED_AT'] = str(msg['CREATED_AT'])
-                    response = {"status": "success", "messages": messages}
 
                 elif action == "message_sent":
                     email = data.get("email")
@@ -500,9 +480,133 @@ class ClientHandler(threading.Thread):
                     conn.commit()
                     response = {"status": "success", "message": "메시지 설정이 저장되었습니다."}
 
+# client_handler.py의 route_request 내부에 추가/수정할 백엔드 로직
 
+                # ===========================================
+                # 💡 [블랙리스트 기능] 사용자 검색 및 차단 상태 조회
+                # ===========================================
+                elif action == "search_users_for_blacklist":
+                    owner_email = data.get("owner_email")
+                    keyword = data.get("keyword", "")
+                    
+                    # 1. 내 USER_ID 조회
+                    cursor.execute("SELECT USER_ID FROM USER WHERE EMAIL = %s", (owner_email,))
+                    owner_row = cursor.fetchone()
+                    if not owner_row:
+                        response = {"status": "fail", "message": "사용자 정보를 찾을 수 없습니다."}
+                    else:
+                        owner_id = owner_row['USER_ID']
+                        
+                        # 2. 키워드가 포함된 유저 검색 (검색어 일치, 내 자신 제외)
+                        sql = """
+                            SELECT u.USER_ID, u.EMAIL, u.NAME,
+                                   (SELECT COUNT(*) FROM BLACKLIST b 
+                                    WHERE b.USER_ID = %s AND b.BLOCKED_USER_ID = u.USER_ID) AS IS_BLOCKED
+                            FROM USER u
+                            WHERE (u.EMAIL LIKE %s OR u.NAME LIKE %s) AND u.USER_ID != %s
+                        """
+                        search_pattern = f"%{keyword}%"
+                        cursor.execute(sql, (owner_id, search_pattern, search_pattern, owner_id))
+                        users = cursor.fetchall()
+                        
+                        # 결과를 불리언(True/False) 형태로 변환
+                        for u in users:
+                            u['IS_BLOCKED'] = bool(u['IS_BLOCKED'])
+                            
+                        response = {"status": "success", "users": users}
 
+                # ===========================================
+                # 💡 [블랙리스트 기능] 차단 등록 및 해제 처리 (BLACKLIST 테이블 연동)
+                # ===========================================
+                elif action == "update_blacklist_status":
+                    owner_email = data.get("owner_email")
+                    target_email = data.get("target_email")
+                    is_block = data.get("is_block") # True: 차단 등록, False: 차단 해제
+                    
+                    # 내 ID와 상대방 ID 조회
+                    cursor.execute("SELECT USER_ID FROM USER WHERE EMAIL = %s", (owner_email,))
+                    owner_row = cursor.fetchone()
+                    cursor.execute("SELECT USER_ID FROM USER WHERE EMAIL = %s", (target_email,))
+                    target_row = cursor.fetchone()
+                    
+                    if not owner_row or not target_row:
+                        response = {"status": "fail", "message": "사용자 정보를 찾을 수 없습니다."}
+                    else:
+                        owner_id = owner_row['USER_ID']
+                        target_id = target_row['USER_ID']
+                        
+                        if is_block:
+                            # 이미 차단되어 있는지 확인 후 INSERT
+                            cursor.execute("""
+                                SELECT BLACKLIST_ID FROM BLACKLIST 
+                                WHERE USER_ID = %s AND BLOCKED_USER_ID = %s
+                            """, (owner_id, target_id))
+                            if not cursor.fetchone():
+                                cursor.execute("""
+                                    INSERT INTO BLACKLIST (USER_ID, BLOCKED_USER_ID) 
+                                    VALUES (%s, %s)
+                                """, (owner_id, target_id))
+                                conn.commit()
+                            response = {"status": "success", "message": "블랙리스트에 차단 등록되었습니다."}
+                        else:
+                            # 차단 해제 (DELETE)
+                            cursor.execute("""
+                                DELETE FROM BLACKLIST 
+                                WHERE USER_ID = %s AND BLOCKED_USER_ID = %s
+                            """, (owner_id, target_id))
+                            conn.commit()
+                            response = {"status": "success", "message": "블랙리스트 차단이 해제되었습니다."}
 
+                # ===========================================
+                # 💡 [메시지 수신함 조회 수정] 블랙리스트 회원 필터링 적용
+                # ===========================================
+                elif action == "message_received":
+                    email = data.get("email")
+                    cursor.execute("SELECT USER_ID FROM USER WHERE EMAIL = %s", (email,))
+                    user_row = cursor.fetchone()
+                    if not user_row:
+                        return {"status": "fail", "message": "사용자 정보를 찾을 수 없습니다."}
+                    
+                    my_user_id = user_row['USER_ID']
+                    
+                    # 💡 핵심 요구사항: 내가(RECEIVER) 차단한 사람(SENDER)이 보낸 메시지는 조회되지 않도록 NOT IN 서브쿼리 추가
+                    sql = """
+                        SELECT m.MESSAGE_ID, u.EMAIL as SENDER_EMAIL, m.CONTENT, m.IS_READ, m.CREATED_AT
+                        FROM MESSAGE m
+                        JOIN USER u ON m.SENDER_ID = u.USER_ID
+                        WHERE m.RECEIVER_ID = %s
+                          AND m.SENDER_ID NOT IN (
+                              SELECT BLOCKED_USER_ID FROM BLACKLIST WHERE USER_ID = %s
+                          )
+                        ORDER BY m.CREATED_AT DESC
+                    """
+                    cursor.execute(sql, (my_user_id, my_user_id))
+                    messages = cursor.fetchall()
+                    for msg in messages:
+                        if msg.get('CREATED_AT'):
+                            msg['CREATED_AT'] = str(msg['CREATED_AT'])
+                    response = {"status": "success", "messages": messages}
+
+                elif action == "get_blocked_users_list":
+                                    owner_email = data.get("owner_email")
+                                    cursor.execute("SELECT USER_ID FROM USER WHERE EMAIL = %s", (owner_email,))
+                                    owner_row = cursor.fetchone()
+                                    if not owner_row:
+                                        response = {"status": "fail", "message": "사용자 정보를 찾을 수 없습니다."}
+                                    else:
+                                        sql = """
+                                            SELECT u.EMAIL, u.NAME, b.CREATED_AT
+                                            FROM BLACKLIST b
+                                            JOIN USER u ON b.BLOCKED_USER_ID = u.USER_ID
+                                            WHERE b.USER_ID = %s
+                                            ORDER BY b.CREATED_AT DESC
+                                        """
+                                        cursor.execute(sql, (owner_row['USER_ID'],))
+                                        blocked_users = cursor.fetchall()
+                                        for u in blocked_users:
+                                            if u.get('CREATED_AT'):
+                                                u['CREATED_AT'] = str(u['CREATED_AT'])
+                                        response = {"status": "success", "users": blocked_users}
 
 
             except Exception as e:
