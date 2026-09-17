@@ -63,6 +63,8 @@ class MainWindow(QMainWindow):
         )
 
         self.base_path = os.path.dirname(os.path.abspath(__file__))
+        # 💡 [핵심 수정] init_submenu 내 load_and_update_storage_info 참조 오류 방지를 위해 사전 초기화
+        self.content_pages = {}
 
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
@@ -309,10 +311,13 @@ class MainWindow(QMainWindow):
     def load_and_update_storage_info(self):
             """서버에서 현재 사용자의 사용량과 등급별 최대 용량을 가져와 사이드바 및 홈 화면에 반영합니다."""
             user_email = self.user_info.get("email")
+            print(f"[디버그] 요청 이메일: {user_email}") # 👈 1번 출력 확인
             if not user_email or not self.net_client:
+                print("[디버그] email 또는 net_client가 없어 요청을 중단합니다.")
                 return
 
             res = self.net_client.get_user_storage_info(user_email)
+            print(f"[디버그] 서버 응답 데이터: {res}") # 👈 2번 출력 확인 (VVIP가 들어오는지 체크)
             if res.get("status") == "success":
                 grade_name = res.get("grade_name", "일반")
                 max_storage_bytes = res.get("max_storage", 500 * 1024 * 1024) # 기본 500MB
