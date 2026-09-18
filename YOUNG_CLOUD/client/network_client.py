@@ -34,6 +34,7 @@ class NetworkClient:
         """서버로 작업 요청(Action)과 데이터를 전송하고 응답을 받아오는 함수"""
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(5.0)  # 💡 5초 타임아웃 추가
             sock.connect((self.host, self.port))
             
             payload = {
@@ -260,7 +261,7 @@ class NetworkClient:
 # ==========================================
 def send_login_request(email, password):
     """login_window.py에서 임포트하는 함수 에러 방지용 래퍼 함수"""
-    client = NetworkClient(host='127.0.0.1', port=8888)
+    client = NetworkClient()
     response = client.send_request("login", {
         "user_id": email,
         "password": password
