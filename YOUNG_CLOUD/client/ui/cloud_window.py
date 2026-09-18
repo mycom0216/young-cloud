@@ -1,6 +1,6 @@
 import os
 import base64
-from PySide6.QtCore import Qt, QSettings
+from PySide6.QtCore import Qt, QSettings, Signal
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -135,6 +135,8 @@ class CloudClient:
             b64_data = file_info.get("file_bytes_base64", "")
 
             try:
+                # 💡 [추가] 경로에 폴더가 존재하지 않으면 자동으로 생성 (이미 존재해도 에러 안 남)
+                os.makedirs(save_folder, exist_ok=True)
                 file_bytes = base64.b64decode(b64_data)
                 save_path = os.path.join(save_folder, file_name)
                 with open(save_path, "wb") as f:
@@ -144,16 +146,16 @@ class CloudClient:
                 return {"status": "fail", "message": f"파일 저장 실패: {str(e)}"}
         return res
 
-    def move_to_trash(self, file_id):
-        """파일을 휴지통 상태로 변경합니다."""
+    def move_to_trash(self, item_id, item_type="FILE"):
+        """파일또는 폴더를 휴지통 상태로 변경합니다."""
         if self.net_client:
-            return self.net_client.send_request("cloud_move_to_trash", {"file_id": file_id})
+            return self.net_client.send_request("cloud_move_to_trash", {"item_id": item_id, "file_id": item_id, "item_type": item_type})
         return {"status": "fail", "message": "서버와 연결할 수 없습니다."}
 
-    def restore_from_trash(self, file_id):
-        """휴지통의 파일을 다시 정상 복원합니다."""
+    def restore_from_trash(self, item_id, item_type="FILE"):
+        """휴지통의 파일 또는 폴더를 다시 정상 복원합니다."""
         if self.net_client:
-            return self.net_client.send_request("cloud_restore", {"file_id": file_id})
+            return self.net_client.send_request("cloud_restore", {"item_id": item_id, "file_id": item_id, "item_type": item_type})
         return {"status": "fail", "message": "서버와 연결할 수 없습니다."}
 
     def get_trash_files(self):
@@ -162,10 +164,10 @@ class CloudClient:
             return self.net_client.send_request("cloud_list_trash", {"email": self.user_email})
         return {"status": "fail", "message": "연결 오류"}
 
-    def delete_from_trash(self, file_id):
-        """휴지통 내의 파일을 완전 영구 삭제합니다."""
+    def delete_from_trash(self, item_id, item_type="FILE"):
+        """휴지통 내의 파일 또는 폴더를 완전 영구 삭제합니다."""
         if self.net_client:
-            return self.net_client.send_request("cloud_delete_permanently", {"file_id": file_id})
+            return self.net_client.send_request("cloud_delete_permanently", {"item_id": item_id, "file_id": item_id, "item_type": item_type})
         return {"status": "fail", "message": "서버와 연결할 수 없습니다."}
 
 
@@ -377,7 +379,8 @@ class FileTransferDialog(QDialog):
 
 class CloudWindow(QWidget):
     """사용자 파일함 클래스"""
-
+    # 용량 변경 발생 알림 시그널 정의
+    storage_updated = Signal()
     def __init__(self, net_client=None, user_info=None, parent=None):
         super().__init__(parent)
 
@@ -585,6 +588,7 @@ class CloudWindow(QWidget):
         )
         if dialog.exec() == QDialog.Accepted:
             self.load_file_list()
+            self.storage_updated.emit()  # 🔥 여기서 시그널을 발생시켜야 합니다.
 
     def open_download_dialog(self):
         selected_files = self.get_checked_items(target_type="FILE")
@@ -644,17 +648,27 @@ class CloudWindow(QWidget):
         if answer != QMessageBox.StandardButton.Yes:
             return
 
+        # 💡 [수정] item_type(FILE 또는 FOLDER) 정보를 서버에 함께 전달
         for item in selected_items:
-            if item["item_type"] == "FILE":
-                self.cloud_client.move_to_trash(item["id"])
+            self.cloud_client.move_to_trash(item["id"], item_type=item["item_type"])
 
         QMessageBox.information(self, "완료", "선택한 항목이 휴지통으로 이동되었습니다.")
         self.load_file_list()
+        self.storage_updated.emit()
+    # def upload_file_success(self):
+    #     """파일 업로드 성공 시 호출되는 콜백/메소드"""
+    #     self.load_file_list()  # 기존 파일 목록 갱신
+    #     self.storage_updated.emit()  # 🔥 사이드바 용량 갱신 시그널 발생
 
+    # def permanent_delete_success(self):
+    #     """파일 완전 삭제 성공 시 호출되는 콜백/메소드"""
+    #     self.load_file_list()
+    #     self.storage_updated.emit()  # 🔥 사이드바 용량 갱신 시그널 발생
 
 class TrashWindow(QWidget):
     """휴지통 전용 화면 클래스"""
-
+    storage_updated = Signal()
+    
     def __init__(self, net_client=None, user_info=None, parent=None):
         super().__init__(parent)
         self.net_client = net_client
@@ -730,12 +744,41 @@ class TrashWindow(QWidget):
         self.permanent_delete_button.clicked.connect(self.delete_permanently)
 
     def load_file_list(self):
-        """휴지통 내의 파일 목록 조회 및 출력"""
+        """휴지통 내의 폴더 및 파일 목록 조회 및 출력"""
         response = self.cloud_client.get_trash_files()
         self.trash_table.setRowCount(0)
 
         if response.get("status") == "success":
-            for file_data in response.get("files", response.get("file_list", [])):
+            # 휴지통 내 폴더 출력
+            folders = response.get("folders", [])
+            for f_data in folders:
+                row = self.trash_table.rowCount()
+                self.trash_table.insertRow(row)
+
+                check_box = QCheckBox()
+                check_widget = QWidget()
+                check_layout = QHBoxLayout(check_widget)
+                check_layout.setContentsMargins(0, 0, 0, 0)
+                check_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                check_layout.addWidget(check_box)
+                self.trash_table.setCellWidget(row, 0, check_widget)
+
+                folder_id = f_data.get("FOLDER_ID")
+                folder_name = f_data.get("FOLDER_NAME", "")
+                created_at = f_data.get("CREATED_AT", "")
+
+                item = QTableWidgetItem(f"📁 {folder_name}")
+                item.setData(Qt.ItemDataRole.UserRole, folder_id)
+                item.setData(Qt.ItemDataRole.UserRole + 1, "FOLDER")
+
+                self.trash_table.setItem(row, 1, item)
+                self.trash_table.setItem(row, 2, QTableWidgetItem("폴더"))
+                self.trash_table.setItem(row, 3, QTableWidgetItem(str(created_at)))
+                self.trash_table.setItem(row, 4, QTableWidgetItem("-"))
+
+            # 휴지통 내 파일 출력
+            files = response.get("files", response.get("file_list", []))
+            for file_data in files:
                 row = self.trash_table.rowCount()
                 self.trash_table.insertRow(row)
 
@@ -754,6 +797,7 @@ class TrashWindow(QWidget):
 
                 item = QTableWidgetItem(file_name)
                 item.setData(Qt.ItemDataRole.UserRole, file_id)
+                item.setData(Qt.ItemDataRole.UserRole + 1, "FILE")
 
                 self.trash_table.setItem(row, 1, item)
                 self.trash_table.setItem(row, 2, QTableWidgetItem(get_file_type(file_name)))
@@ -773,43 +817,46 @@ class TrashWindow(QWidget):
 
             item = self.trash_table.item(row, 1)
             if item:
+                # 💡 [수정] KeyError 예외 방지를 위해 item_type 정보 추출 구문 추가
                 selected_items.append({
                     "id": item.data(Qt.ItemDataRole.UserRole),
+                    "item_type": item.data(Qt.ItemDataRole.UserRole + 1),
                     "name": item.text()
                 })
         return selected_items
 
     def restore_selected(self):
-        """선택된 파일 복원"""
+        """선택된 항목(파일/폴더) 복원"""
         selected_items = self.get_checked_items()
         if not selected_items:
-            QMessageBox.warning(self, "선택 필요", "복원할 파일을 체크해주세요.")
+            QMessageBox.warning(self, "선택 필요", "복원할 항목을 체크해주세요.")
             return
 
         all_success = True
         for item in selected_items:
-            res = self.cloud_client.restore_from_trash(item["id"])
+            res = self.cloud_client.restore_from_trash(item["id"], item_type=item["item_type"])
             if res.get("status") != "success":
                 all_success = False
 
         if all_success:
-            QMessageBox.information(self, "복원 완료", f"선택한 {len(selected_items)}개 파일이 복원되었습니다.")
+            QMessageBox.information(self, "복원 완료", f"선택한 {len(selected_items)}개 항목이 복원되었습니다.")
         else:
-            QMessageBox.warning(self, "일부 실패", "일부 파일 복원 중 오류가 발생했습니다.")
+            QMessageBox.warning(self, "일부 실패", "일부 항목 복원 중 오류가 발생했습니다.")
 
         self.load_file_list()
+        # 💡 복원 시 사이드바 용량 갱신 시그널 발생
+        self.storage_updated.emit()
 
     def delete_permanently(self):
-        """선택된 파일 영구 삭제"""
+        """선택된 항목(파일/폴더) 영구 삭제"""
         selected_items = self.get_checked_items()
         if not selected_items:
-            QMessageBox.warning(self, "선택 필요", "영구 삭제할 파일을 체크해주세요.")
+            QMessageBox.warning(self, "선택 필요", "영구 삭제할 항목을 체크해주세요.")
             return
 
-        # 삭제 확인/취소 팝업창 생성
         msg_box = QMessageBox(self)
         msg_box.setWindowTitle("영구 삭제 확인")
-        msg_box.setText(f"선택한 {len(selected_items)}개 항목을 진짜 지우시겠습니까?\n영구 삭제된 파일은 복구할 수 없습니다.")
+        msg_box.setText(f"선택한 {len(selected_items)}개 항목을 진짜 지우시겠습니까?\n영구 삭제된 항목은 복구할 수 없습니다.")
         msg_box.setIcon(QMessageBox.Icon.Warning)
 
         confirm_btn = msg_box.addButton("확인", QMessageBox.ButtonRole.AcceptRole)
@@ -818,20 +865,20 @@ class TrashWindow(QWidget):
 
         msg_box.exec()
 
-        # 취소 클릭 또는 팝업 창을 닫은 경우 진행 중단
         if msg_box.clickedButton() != confirm_btn:
             return
 
-        # 확인 클릭 시 영구 삭제 진행
         all_success = True
         for item in selected_items:
-            res = self.cloud_client.delete_from_trash(item["id"])
+            res = self.cloud_client.delete_from_trash(item["id"], item_type=item["item_type"])
             if res.get("status") != "success":
                 all_success = False
 
         if all_success:
-            QMessageBox.information(self, "완료", "선택한 파일이 영구 삭제되었습니다.")
+            QMessageBox.information(self, "완료", "선택한 항목이 영구 삭제되었습니다.")
         else:
-            QMessageBox.warning(self, "일부 실패", "일부 파일 영구 삭제 중 오류가 발생했습니다.")
+            QMessageBox.warning(self, "일부 실패", "일부 항목 영구 삭제 중 오류가 발생했습니다.")
 
         self.load_file_list()
+        # 💡 영구 삭제 완료 시 사이드바 용량 갱신 시그널 발생
+        self.storage_updated.emit()

@@ -7,6 +7,7 @@ import hashlib
 import os
 import base64
 import struct  # 💡 4바이트 길이 헤더 처리를 위해 추가
+import shutil  # 💡 필수: 폴더 삭제용 shutil 추가
 from datetime import datetime, date
 
 # 서버 측 클라우드 저장소 기본 디렉토리 설정 (cloud_storage)
@@ -92,12 +93,9 @@ class ClientHandler(threading.Thread):
                     if not email or not password:
                         response = {"status": "fail", "message": "이메일과 비밀번호를 입력해주세요."}
                     else:
-                        # DB 트리거가 INSERT/UPDATE 시 SHA2(password, 256)을 수행하므로
-                        # 로그인 조회 시에도 SHA2() 함수를 이용해 비교합니다.
                         sql = "SELECT * FROM USER WHERE EMAIL = %s AND PASSWORD_HASH = SHA2(%s, 256)"
                         cursor.execute(sql, (email, password))
                         user = cursor.fetchone()
-                        # 3. 조회 결과(user) 존재 여부 검증
                         if user:
                             response = {
                                 "status": "success", 
@@ -151,14 +149,12 @@ class ClientHandler(threading.Thread):
                     if cursor.fetchone():
                         response = {"status": "fail", "message": "이미 가입된 이메일 계정입니다."}
                     else:
-                        hashed_pw = hashlib.sha256(password.encode("utf-8")).hexdigest()
-                        # 등급 이름에 따른 SERVICE_ID 조회 (없으면 기본값 1)
                         cursor.execute("SELECT `SERVICE_ID` FROM SERVICE WHERE `GRADE_NAME` = %s", (grade_name,))
                         service_row = cursor.fetchone()
                         service_id = service_row['SERVICE_ID'] if service_row else 1
                         
                         sql = "INSERT INTO USER (EMAIL, PASSWORD_HASH, NAME, COMP, `SERVICE_ID`) VALUES (%s, %s, %s, %s, %s)"
-                        cursor.execute(sql, (email, password, name, company, service_id)) # 평문 전달 -> 트리거가 해싱
+                        cursor.execute(sql, (email, password, name, company, service_id))
                         conn.commit()
                         response = {"status": "success", "message": "회원가입이 완료되었습니다!"}
 
@@ -294,56 +290,66 @@ class ClientHandler(threading.Thread):
                     if not email or not password:
                         response = {"status": "fail", "message": "비밀번호 정보가 올바르지 않습니다."}
                     else:
-                    # hashlib 해싱을 제거하고 평문 전달 -> UPDATE 트리거가 해싱 처리
                         cursor.execute("UPDATE USER SET PASSWORD_HASH = %s WHERE EMAIL = %s", (password, email))
                         conn.commit()
                         response = {"status": "success", "message": "비밀번호가 성공적으로 변경되었습니다."}
-
                 # ===========================================
                 # 6. 클라우드: 파일/폴더 목록 조회
                 # ===========================================
                 elif action == "cloud_list_files":
                     email = data.get("email")
-                    parent_folder_id = data.get("parent_folder_id")  # None이면 루트 폴더
+                    parent_folder_id = data.get("parent_folder_id")
 
                     cursor.execute("SELECT USER_ID, NAME, EMAIL, COMP FROM USER WHERE EMAIL = %s", (email,))
                     user = cursor.fetchone()
                     if not user:
                         response = {"status": "fail", "message": "사용자 정보를 찾을 수 없습니다."}
                     else:
-                        user_id = user['USER_ID']
-                        user_name = user['NAME']
-                        comp_name = user['COMP'] or "DEFAULT_COMP"
+                        user_id = user.get('USER_ID') or user.get('user_id')
+                        user_name = user.get('NAME') or user.get('name', '사용자')
+                        comp_name = user.get('COMP') or user.get('comp') or ""
 
-                        # DB에서 PARENT_FOLDER_ID 기준으로 하위 폴더 조회
-                        if parent_folder_id:
-                            cursor.execute("""
-                                SELECT FOLDER_ID, FOLDER_NAME, RELATIVE_PATH, CREATED_AT
-                                FROM FOLDER
-                                WHERE USER_ID = %s AND PARENT_FOLDER_ID = %s
-                            """, (user_id, parent_folder_id))
-                        else:
-                            cursor.execute("""
-                                SELECT FOLDER_ID, FOLDER_NAME, RELATIVE_PATH, CREATED_AT
-                                FROM FOLDER
-                                WHERE USER_ID = %s AND PARENT_FOLDER_ID IS NULL
-                            """, (user_id,))
-                        folders = cursor.fetchall()
+                        try:
+                            if parent_folder_id:
+                                cursor.execute("""
+                                    SELECT FOLDER_ID, FOLDER_NAME, RELATIVE_PATH, CREATED_AT
+                                    FROM FOLDER
+                                    WHERE USER_ID = %s AND PARENT_FOLDER_ID = %s AND (STATUS != 'TRASH' OR STATUS IS NULL)
+                                """, (user_id, parent_folder_id))
+                            else:
+                                cursor.execute("""
+                                    SELECT FOLDER_ID, FOLDER_NAME, RELATIVE_PATH, CREATED_AT
+                                    FROM FOLDER
+                                    WHERE USER_ID = %s AND PARENT_FOLDER_ID IS NULL AND (STATUS != 'TRASH' OR STATUS IS NULL)
+                                """, (user_id,))
+                            folders = cursor.fetchall()
+                        except Exception:
+                            if parent_folder_id:
+                                cursor.execute("SELECT FOLDER_ID, FOLDER_NAME, RELATIVE_PATH, CREATED_AT FROM FOLDER WHERE USER_ID = %s AND PARENT_FOLDER_ID = %s", (user_id, parent_folder_id))
+                            else:
+                                cursor.execute("SELECT FOLDER_ID, FOLDER_NAME, RELATIVE_PATH, CREATED_AT FROM FOLDER WHERE USER_ID = %s AND PARENT_FOLDER_ID IS NULL", (user_id,))
+                            folders = cursor.fetchall()
 
-                        # DB에서 FOLDER_ID 기준으로 파일 목록 조회
-                        if parent_folder_id:
-                            cursor.execute("""
-                                SELECT FILE_ID, FOLDER_ID, FILE_NAME, ORIGINAL_NAME, FILE_SIZE, STATUS, UPLOADED_AT
-                                FROM FILE
-                                WHERE USER_ID = %s AND FOLDER_ID = %s AND STATUS != 'TRASH'
-                            """, (user_id, parent_folder_id))
-                        else:
-                            cursor.execute("""
-                                SELECT FILE_ID, FOLDER_ID, FILE_NAME, ORIGINAL_NAME, FILE_SIZE, STATUS, UPLOADED_AT
-                                FROM FILE
-                                WHERE USER_ID = %s AND FOLDER_ID IS NULL AND STATUS != 'TRASH'
-                            """, (user_id,))
-                        files = cursor.fetchall()
+                        try:
+                            if parent_folder_id:
+                                cursor.execute("""
+                                    SELECT FILE_ID, FOLDER_ID, FILE_NAME, ORIGINAL_NAME, FILE_SIZE, STATUS, UPLOADED_AT
+                                    FROM FILE
+                                    WHERE USER_ID = %s AND FOLDER_ID = %s AND (STATUS != 'TRASH' OR STATUS IS NULL)
+                                """, (user_id, parent_folder_id))
+                            else:
+                                cursor.execute("""
+                                    SELECT FILE_ID, FOLDER_ID, FILE_NAME, ORIGINAL_NAME, FILE_SIZE, STATUS, UPLOADED_AT
+                                    FROM FILE
+                                    WHERE USER_ID = %s AND FOLDER_ID IS NULL AND (STATUS != 'TRASH' OR STATUS IS NULL)
+                                """, (user_id,))
+                            files = cursor.fetchall()
+                        except Exception:
+                            if parent_folder_id:
+                                cursor.execute("SELECT FILE_ID, FOLDER_ID, FILE_NAME, ORIGINAL_NAME, FILE_SIZE, UPLOADED_AT FROM FILE WHERE USER_ID = %s AND FOLDER_ID = %s", (user_id, parent_folder_id))
+                            else:
+                                cursor.execute("SELECT FILE_ID, FOLDER_ID, FILE_NAME, ORIGINAL_NAME, FILE_SIZE, UPLOADED_AT FROM FILE WHERE USER_ID = %s AND FOLDER_ID IS NULL", (user_id,))
+                            files = cursor.fetchall()
 
                         response = {
                             "status": "success",
@@ -381,10 +387,9 @@ class ClientHandler(threading.Thread):
                         physical_dir = os.path.join(CLOUD_STORAGE_DIR, comp, user_email, rel_path)
                         os.makedirs(physical_dir, exist_ok=True)
 
-                        # FOLDER_TYPE을 DB enum에 정의된 'USER'로 지정
                         sql = """
-                            INSERT INTO FOLDER (COMP, USER_ID, FOLDER_NAME, FOLDER_TYPE, PARENT_FOLDER_ID, RELATIVE_PATH)
-                            VALUES (%s, %s, %s, 'USER', %s, %s)
+                            INSERT INTO FOLDER (COMP, USER_ID, FOLDER_NAME, FOLDER_TYPE, PARENT_FOLDER_ID, RELATIVE_PATH, STATUS)
+                            VALUES (%s, %s, %s, 'USER', %s, %s, 'NORMAL')
                         """
                         cursor.execute(sql, (comp, user_id, folder_name, parent_folder_id, rel_path))
                         conn.commit()
@@ -426,7 +431,6 @@ class ClientHandler(threading.Thread):
                         with open(physical_file_path, "wb") as f:
                             f.write(file_bytes)
 
-                        # folder_id가 미지정/None인 경우 DB에 NULL로 안심 저장
                         sql = """
                             INSERT INTO FILE (FOLDER_ID, USER_ID, FILE_NAME, ORIGINAL_NAME, FILE_PATH, FILE_SIZE, STATUS)
                             VALUES (%s, %s, %s, %s, %s, %s, 'COMPLETED')
@@ -467,19 +471,23 @@ class ClientHandler(threading.Thread):
                                         "file_bytes_base64": file_b64
                                     }
                                 }
-
                 # ===========================================
                 # 6-4. 클라우드: 휴지통으로 이동
                 # ===========================================
                 elif action == "cloud_move_to_trash":
-                    file_id = data.get("file_id")
-                    if not file_id:
-                        response = {"status": "fail", "message": "파일 ID가 제공되지 않았습니다."}
+                    item_id = data.get("item_id") or data.get("file_id")
+                    item_type = data.get("item_type", "FILE")
+
+                    if not item_id:
+                        response = {"status": "fail", "message": "항목 ID가 제공되지 않았습니다."}
                     else:
-                        cursor.execute("UPDATE FILE SET STATUS = 'TRASH' WHERE FILE_ID = %s", (file_id,))
+                        if item_type == "FOLDER":
+                            cursor.execute("UPDATE FOLDER SET STATUS = 'TRASH' WHERE FOLDER_ID = %s", (item_id,))
+                        else:
+                            cursor.execute("UPDATE FILE SET STATUS = 'TRASH' WHERE FILE_ID = %s", (item_id,))
                         conn.commit()
                         response = {"status": "success", "message": "휴지통으로 이동되었습니다."}
-
+                        
                 # ===========================================
                 # 6-5. 클라우드: 휴지통 목록 조회
                 # ===========================================
@@ -491,24 +499,38 @@ class ClientHandler(threading.Thread):
                         response = {"status": "fail", "message": "사용자 정보를 찾을 수 없습니다."}
                     else:
                         cursor.execute("""
+                            SELECT FOLDER_ID, FOLDER_NAME, CREATED_AT
+                            FROM FOLDER
+                            WHERE USER_ID = %s AND STATUS = 'TRASH'
+                        """, (user['USER_ID'],))
+                        trash_folders = cursor.fetchall()
+
+                        cursor.execute("""
                             SELECT FILE_ID, FILE_NAME, ORIGINAL_NAME, FILE_SIZE, UPLOADED_AT
                             FROM FILE
                             WHERE USER_ID = %s AND STATUS = 'TRASH'
                         """, (user['USER_ID'],))
                         trash_files = cursor.fetchall()
+
                         response = {
                             "status": "success",
+                            "folders": trash_folders,
                             "files": trash_files
                         }
                 # ===========================================
                 # 6-6. 클라우드: 휴지통 복원 (신규 추가)
                 # ===========================================
                 elif action == "cloud_restore":
-                    file_id = data.get("file_id")
-                    if not file_id:
-                        response = {"status": "fail", "message": "파일 ID가 제공되지 않았습니다."}
+                    item_id = data.get("item_id") or data.get("file_id")
+                    item_type = data.get("item_type", "FILE")
+
+                    if not item_id:
+                        response = {"status": "fail", "message": "항목 ID가 제공되지 않았습니다."}
                     else:
-                        cursor.execute("UPDATE FILE SET STATUS = 'COMPLETED' WHERE FILE_ID = %s", (file_id,))
+                        if item_type == "FOLDER":
+                            cursor.execute("UPDATE FOLDER SET STATUS = 'NORMAL' WHERE FOLDER_ID = %s", (item_id,))
+                        else:
+                            cursor.execute("UPDATE FILE SET STATUS = 'COMPLETED' WHERE FILE_ID = %s", (item_id,))
                         conn.commit()
                         response = {"status": "success", "message": "정상적으로 복원되었습니다."}
 
@@ -516,30 +538,50 @@ class ClientHandler(threading.Thread):
                 # 6-7. 클라우드: 영구 삭제
                 # ===========================================
                 elif action == "cloud_delete_permanently":
-                    file_id = data.get("file_id")
-                    if not file_id:
-                        response = {"status": "fail", "message": "파일 ID가 제공되지 않았습니다."}
+                    item_id = data.get("item_id") or data.get("file_id")
+                    item_type = data.get("item_type", "FILE")
+
+                    if not item_id:
+                        response = {"status": "fail", "message": "항목 ID가 제공되지 않았습니다."}
                     else:
-                        cursor.execute("SELECT FILE_PATH FROM FILE WHERE FILE_ID = %s", (file_id,))
-                        file_row = cursor.fetchone()
+                        if item_type == "FOLDER":
+                            cursor.execute("SELECT RELATIVE_PATH, USER_ID, COMP FROM FOLDER WHERE FOLDER_ID = %s", (item_id,))
+                            f_row = cursor.fetchone()
+                            if f_row:
+                                cursor.execute("SELECT EMAIL FROM USER WHERE USER_ID = %s", (f_row['USER_ID'],))
+                                u_row = cursor.fetchone()
+                                if u_row and f_row.get('RELATIVE_PATH'):
+                                    comp = f_row.get('COMP') or "DEFAULT_COMP"
+                                    user_email = u_row['EMAIL']
+                                    physical_dir = os.path.join(CLOUD_STORAGE_DIR, comp, user_email, f_row['RELATIVE_PATH'])
+                                    if os.path.exists(physical_dir):
+                                        try:
+                                            shutil.rmtree(physical_dir)
+                                        except Exception as f_err:
+                                            print(f"[폴더 영구 삭제 실패] {f_err}")
 
-                        if file_row and file_row['FILE_PATH'] and os.path.exists(file_row['FILE_PATH']):
-                            try:
-                                os.remove(file_row['FILE_PATH'])
-                            except Exception as file_err:
-                                print(f"[파일 영구 삭제 실패] 디스크 파일 삭제 실패: {file_err}")
+                                cursor.execute("DELETE FROM FILE WHERE FOLDER_ID = %s", (item_id,))
+                                cursor.execute("DELETE FROM FOLDER WHERE FOLDER_ID = %s", (item_id,))
+                                conn.commit()
+                            response = {"status": "success", "message": "폴더가 영구 삭제되었습니다."}
+                        else:
+                            cursor.execute("SELECT FILE_PATH FROM FILE WHERE FILE_ID = %s", (item_id,))
+                            file_row = cursor.fetchone()
 
-                        cursor.execute("DELETE FROM FILE WHERE FILE_ID = %s", (file_id,))
-                        conn.commit()
-                        response = {"status": "success", "message": "영구 삭제가 완료되었습니다."}
+                            if file_row and file_row['FILE_PATH'] and os.path.exists(file_row['FILE_PATH']):
+                                try:
+                                    os.remove(file_row['FILE_PATH'])
+                                except Exception as file_err:
+                                    print(f"[파일 영구 삭제 실패] 디스크 파일 삭제 실패: {file_err}")
+
+                            cursor.execute("DELETE FROM FILE WHERE FILE_ID = %s", (item_id,))
+                            conn.commit()
+                            response = {"status": "success", "message": "영구 삭제가 완료되었습니다."}
                 # ===========================================
                 # 6-8. [클라우드 용량 계산] 서버 실제 용량 + DB 반영
                 # ===========================================
                 elif action == "cloud_storage_info":
                     email = data.get("email")
-                    print(f"[cloud_storage_info 실행] email: {email}")
-                    
-                    # 1. 사용자 정보 및 COMP 조회
                     cursor.execute("SELECT USER_ID, COMP, EMAIL FROM USER WHERE EMAIL = %s", (email,))
                     user = cursor.fetchone()
                     
@@ -550,7 +592,6 @@ class ClientHandler(threading.Thread):
                         comp = user['COMP'] or "DEFAULT_COMP"
                         user_email = user['EMAIL']
                         
-                        # 2. 클라우드 디스크 실제 사용량 계산 (Bytes)
                         user_storage_dir = os.path.join(CLOUD_STORAGE_DIR, comp, user_email)
                         total_size_bytes = 0
                         if os.path.exists(user_storage_dir):
@@ -560,28 +601,27 @@ class ClientHandler(threading.Thread):
                                     if os.path.exists(fp):
                                         total_size_bytes += os.path.getsize(fp)
                                             
-                        # 3. SERVICE 테이블과 JOIN하여 등급명 및 최대 용량 조회
-                    cursor.execute("""
-                        SELECT s.GRADE_NAME, s.MAX_STORAGE 
-                        FROM USER u 
-                        LEFT JOIN SERVICE s ON u.SERVICE_ID = s.SERVICE_ID 
-                        WHERE u.USER_ID = %s
-                    """, (user_id,))
-                    service_row = cursor.fetchone()
-                     
-                    if service_row and service_row.get('GRADE_NAME'):
-                        grade_name = service_row['GRADE_NAME']
-                        max_storage_bytes = service_row['MAX_STORAGE']
-                    else:
-                        grade_name = "일반"
-                        max_storage_bytes = 104857600
-                        
-                    response = {
-                        "status": "success",
-                        "grade_name": grade_name,
-                        "max_storage": max_storage_bytes,
-                        "total_used": total_size_bytes
-                    }
+                        cursor.execute("""
+                            SELECT s.GRADE_NAME, s.MAX_STORAGE 
+                            FROM USER u 
+                            LEFT JOIN SERVICE s ON u.SERVICE_ID = s.SERVICE_ID 
+                            WHERE u.USER_ID = %s
+                        """, (user_id,))
+                        service_row = cursor.fetchone()
+                         
+                        if service_row and service_row.get('GRADE_NAME'):
+                            grade_name = service_row['GRADE_NAME']
+                            max_storage_bytes = service_row['MAX_STORAGE']
+                        else:
+                            grade_name = "일반"
+                            max_storage_bytes = 104857600
+                            
+                        response = {
+                            "status": "success",
+                            "grade_name": grade_name,
+                            "max_storage": max_storage_bytes,
+                            "total_used": total_size_bytes
+                        }
                 # ===========================================
                 # 7. [관리자] 사용자 정지/해제 관리
                 # ===========================================
@@ -790,51 +830,7 @@ class ClientHandler(threading.Thread):
                     conn.commit()
                     response = {"status": "success", "message": "파일 받기 저장 경로가 변경되었습니다."}
 
-                # ===========================================
-                # 💡 [클라우드 용량 계산] 서버 실제 용량 + DB 반영
-                # ===========================================
-                elif action == "cloud_storage_info":
-                    email = data.get("email")
-                    cursor.execute("SELECT USER_ID, COMP, EMAIL FROM USER WHERE EMAIL = %s", (email,))
-                    user = cursor.fetchone()
-                    
-                    if not user:
-                        response = {"status": "fail", "message": "사용자 정보를 찾을 수 없습니다."}
-                    else:
-                        user_id = user['USER_ID']
-                        comp = user['COMP'] or "DEFAULT_COMP"
-                        user_email = user['EMAIL']
-                        
-                        # 1. 서버 내 실제 사용자 폴더 경로 계산
-                        user_storage_dir = os.path.join(CLOUD_STORAGE_DIR, comp, user_email)
-                        
-                        total_size_bytes = 0
-                        if os.path.exists(user_storage_dir):
-                            # 폴더 내 모든 파일의 실제 용량을 합산 (휴지통 제외 또는 전체 실사용량)
-                            for root, dirs, files in os.walk(user_storage_dir):
-                                for f in files:
-                                    fp = os.path.join(root, f)
-                                    if os.path.exists(fp):
-                                        total_size_bytes += os.path.getsize(fp)
-                                        
-                        # 2. 서비스 등급별 최대 용량 조회
-                        cursor.execute("""
-                            SELECT s.GRADE_NAME, s.MAX_STORAGE 
-                            FROM USER u 
-                            JOIN SERVICE s ON u.SERVICE_ID = s.SERVICE_ID 
-                            WHERE u.USER_ID = %s
-                        """, (user_id,))
-                        service_row = cursor.fetchone()
-                        
-                        grade_name = service_row['GRADE_NAME'] if service_row else "일반"
-                        max_storage = service_row['MAX_STORAGE'] if service_row else (500 * 1024 * 1024)
-                        
-                        response = {
-                            "status": "success",
-                            "grade_name": grade_name,
-                            "max_storage": max_storage,
-                            "total_used": total_size_bytes  # 사용자가 파일을 지우면 os.walk를 통해 자동으로 용량이 줄어듦
-                        }                    
+
                 # ===========================================
                 # 💡 읽지 않은 메시지 알림표시
                 # ===========================================
